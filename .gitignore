@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# Data
+data/raw/
+data/external/
+data/interim/
+data/processed/
+data/features/
+data/labels/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
