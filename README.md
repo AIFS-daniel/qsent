@@ -141,6 +141,81 @@ Generated outputs and artifacts.
 
 ---
 
+## Running the API Locally
+
+### 1. Install dependencies
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+### 2. Set up environment variables
+
+Copy the example file and fill in your API keys:
+
+```bash
+cp .env.example .env
+```
+
+Required keys:
+```
+NEWS_API_KEY=
+REDDIT_CLIENT_ID=
+REDDIT_CLIENT_SECRET=
+REDDIT_USER_AGENT=qsent/0.1
+HUGGINGFACE_API_KEY=
+```
+
+### 3. Start the server
+
+```bash
+uvicorn qsf.api.main:app --reload
+```
+
+The `--reload` flag restarts the server automatically when you edit source files.
+
+### 4. Explore the interactive API docs
+
+FastAPI generates a live, interactive UI at:
+
+```
+http://127.0.0.1:8000/docs
+```
+
+From the docs page you can:
+- See every endpoint, its expected inputs, and its response schema
+- Click **Try it out** on any endpoint and execute it directly from the browser
+- See the real request being made and the full JSON response
+
+### 5. Hit an endpoint manually
+
+Health check:
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+Analyze a ticker:
+```bash
+curl -X POST http://127.0.0.1:8000/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"ticker": "IONQ"}'
+```
+
+The server terminal will print each incoming request as it is processed:
+```
+INFO:     127.0.0.1:PORT - "POST /analyze HTTP/1.1" 200 OK
+```
+
+### 6. Run the tests
+
+```bash
+pytest tests/
+```
+
+---
+
 ## How to Contribute (High-Level)
 
 - Use **branches + pull requests**
