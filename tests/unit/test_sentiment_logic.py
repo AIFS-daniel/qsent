@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
-from qsf.api.main import (
+from qsf.agents.nodes import (
     SENTIMENT_MAP,
     _get_news,
     _get_reddit,
@@ -66,7 +66,7 @@ class TestScoreSentiment:
             {"label": others[1], "score": remaining},
         ]
 
-    @patch("qsf.api.main.requests.post")
+    @patch("qsf.agents.nodes.requests.post")
     def test_positive_sentiment(self, mock_post):
         mock_post.return_value.json.return_value = [
             self._make_hf_response("positive", 0.9)
@@ -75,7 +75,7 @@ class TestScoreSentiment:
         assert len(scores) == 1
         assert scores[0] == pytest.approx(0.9)
 
-    @patch("qsf.api.main.requests.post")
+    @patch("qsf.agents.nodes.requests.post")
     def test_negative_sentiment(self, mock_post):
         mock_post.return_value.json.return_value = [
             self._make_hf_response("negative", 0.8)
@@ -83,7 +83,7 @@ class TestScoreSentiment:
         scores = _score_sentiment(["Company files for bankruptcy"])
         assert scores[0] == pytest.approx(-0.8)
 
-    @patch("qsf.api.main.requests.post")
+    @patch("qsf.agents.nodes.requests.post")
     def test_neutral_sentiment(self, mock_post):
         mock_post.return_value.json.return_value = [
             self._make_hf_response("neutral", 0.7)
@@ -91,7 +91,7 @@ class TestScoreSentiment:
         scores = _score_sentiment(["Company releases quarterly report"])
         assert scores[0] == pytest.approx(0.0)
 
-    @patch("qsf.api.main.requests.post")
+    @patch("qsf.agents.nodes.requests.post")
     def test_batch_processing(self, mock_post):
         """12 texts should be split into 2 batches: first of 10, second of 2."""
         first_batch = MagicMock()
@@ -104,7 +104,7 @@ class TestScoreSentiment:
         assert mock_post.call_count == 2
         assert len(scores) == 12
 
-    @patch("qsf.api.main.requests.post")
+    @patch("qsf.agents.nodes.requests.post")
     def test_empty_input(self, mock_post):
         scores = _score_sentiment([])
         assert scores == []
@@ -116,7 +116,7 @@ class TestScoreSentiment:
 # ---------------------------------------------------------------------------
 
 class TestGetNews:
-    @patch("qsf.api.main.NewsApiClient")
+    @patch("qsf.agents.nodes.NewsApiClient")
     def test_returns_correctly_shaped_items(self, mock_client_class):
         mock_client_class.return_value.get_everything.return_value = {
             "articles": [
@@ -130,7 +130,7 @@ class TestGetNews:
         assert items[0]["date"] == "2026-02-10"
         assert items[0]["source"] == "news"
 
-    @patch("qsf.api.main.NewsApiClient")
+    @patch("qsf.agents.nodes.NewsApiClient")
     def test_skips_articles_with_no_title(self, mock_client_class):
         mock_client_class.return_value.get_everything.return_value = {
             "articles": [
@@ -142,7 +142,7 @@ class TestGetNews:
         assert len(items) == 1
         assert items[0]["text"] == "Valid article"
 
-    @patch("qsf.api.main.NewsApiClient")
+    @patch("qsf.agents.nodes.NewsApiClient")
     def test_empty_response(self, mock_client_class):
         mock_client_class.return_value.get_everything.return_value = {"articles": []}
         items = _get_news("IONQ")
@@ -160,7 +160,7 @@ class TestGetReddit:
         post.created_utc = (datetime.now() - timedelta(days=days_ago)).timestamp()
         return post
 
-    @patch("qsf.api.main.praw.Reddit")
+    @patch("qsf.agents.nodes.praw.Reddit")
     def test_returns_recent_posts(self, mock_reddit_class):
         mock_reddit_class.return_value.subreddit.return_value.search.return_value = [
             self._make_post("IONQ hits new high", days_ago=5),
@@ -171,7 +171,7 @@ class TestGetReddit:
         assert items[0]["source"] == "social"
         assert items[0]["text"] == "IONQ hits new high"
 
-    @patch("qsf.api.main.praw.Reddit")
+    @patch("qsf.agents.nodes.praw.Reddit")
     def test_filters_out_old_posts(self, mock_reddit_class):
         mock_reddit_class.return_value.subreddit.return_value.search.return_value = [
             self._make_post("Old post", days_ago=31),
@@ -179,7 +179,7 @@ class TestGetReddit:
         items = _get_reddit("IONQ")
         assert items == []
 
-    @patch("qsf.api.main.praw.Reddit")
+    @patch("qsf.agents.nodes.praw.Reddit")
     def test_searches_all_three_subreddits(self, mock_reddit_class):
         mock_subreddit = mock_reddit_class.return_value.subreddit.return_value
         mock_subreddit.search.return_value = [
