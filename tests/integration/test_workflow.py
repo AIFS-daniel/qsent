@@ -1,14 +1,15 @@
 """
 Integration tests for the LangGraph pipeline.
-All external API calls are mocked. These tests verify that nodes are wired
-correctly and state flows through the full graph as expected.
+Providers are injected via build_pipeline() — no module-level patching.
+Tests verify that nodes are wired correctly and state flows through the full
+graph as expected.
 """
-from unittest.mock import patch
+from unittest.mock import MagicMock
 
 import pandas as pd
 import pytest
 
-from qsf.agents.workflow import pipeline
+from qsf.agents.workflow import build_pipeline
 
 MOCK_HIST = pd.DataFrame(
     {"Close": [10.0, 10.5, 11.0], "Volume": [1000000, 1200000, 1100000]},
@@ -24,13 +25,24 @@ MOCK_REDDIT = [
 MOCK_SCORES = [0.8, 0.6, 0.7]
 
 
-@patch("qsf.agents.nodes._score_sentiment", return_value=MOCK_SCORES)
-@patch("qsf.agents.nodes._get_reddit", return_value=MOCK_REDDIT)
-@patch("qsf.agents.nodes._get_news", return_value=MOCK_NEWS)
-@patch("qsf.agents.nodes.yf.Ticker")
-def test_happy_path_produces_result(mock_ticker, mock_news, mock_reddit, mock_score):
-    mock_ticker.return_value.history.return_value = MOCK_HIST
+def make_pipeline(history=None, articles=None, posts=None, scores=None):
+    market = MagicMock()
+    market.get_history.return_value = MOCK_HIST if history is None else history
 
+    news = MagicMock()
+    news.get_articles.return_value = MOCK_NEWS if articles is None else articles
+
+    social = MagicMock()
+    social.get_posts.return_value = MOCK_REDDIT if posts is None else posts
+
+    model = MagicMock()
+    model.score.return_value = MOCK_SCORES if scores is None else scores
+
+    return build_pipeline(market, news, social, model), news, social
+
+
+def test_happy_path_produces_result():
+    pipeline, _, _ = make_pipeline()
     state = pipeline.invoke({"ticker": "IONQ"})
 
     assert state.get("error") is None
@@ -40,39 +52,27 @@ def test_happy_path_produces_result(mock_ticker, mock_news, mock_reddit, mock_sc
     assert state["result"]["sentiment_score"] is not None
 
 
-@patch("qsf.agents.nodes.yf.Ticker")
-def test_invalid_ticker_sets_error(mock_ticker):
-    mock_ticker.return_value.history.return_value = pd.DataFrame()
-
+def test_invalid_ticker_sets_error():
+    pipeline, _, _ = make_pipeline(history=pd.DataFrame())
     state = pipeline.invoke({"ticker": "FAKE"})
 
     assert "error" in state
     assert state.get("result") is None
 
 
-@patch("qsf.agents.nodes._score_sentiment", return_value=[])
-@patch("qsf.agents.nodes._get_reddit", return_value=[])
-@patch("qsf.agents.nodes._get_news", return_value=[])
-@patch("qsf.agents.nodes.yf.Ticker")
-def test_no_text_data_sets_error(mock_ticker, mock_news, mock_reddit, mock_score):
-    mock_ticker.return_value.history.return_value = MOCK_HIST
-
+def test_no_text_data_sets_error():
+    pipeline, _, _ = make_pipeline(articles=[], posts=[], scores=[])
     state = pipeline.invoke({"ticker": "IONQ"})
 
     assert "error" in state
     assert state.get("result") is None
 
 
-@patch("qsf.agents.nodes._score_sentiment", return_value=MOCK_SCORES)
-@patch("qsf.agents.nodes._get_reddit", return_value=MOCK_REDDIT)
-@patch("qsf.agents.nodes._get_news", return_value=MOCK_NEWS)
-@patch("qsf.agents.nodes.yf.Ticker")
-def test_ticker_is_available_throughout_pipeline(mock_ticker, mock_news, mock_reddit, mock_score):
+def test_ticker_is_available_throughout_pipeline():
     """Verify ticker is preserved in state from start to finish."""
-    mock_ticker.return_value.history.return_value = MOCK_HIST
-
+    pipeline, mock_news, mock_social = make_pipeline()
     state = pipeline.invoke({"ticker": "IONQ"})
 
     assert state["ticker"] == "IONQ"
-    mock_news.assert_called_once_with("IONQ")
-    mock_reddit.assert_called_once_with("IONQ")
+    mock_news.get_articles.assert_called_once_with("IONQ")
+    mock_social.get_posts.assert_called_once_with("IONQ")
