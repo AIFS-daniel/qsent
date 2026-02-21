@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
+import requests
 
 from qsf.agents.nodes import (
     SENTIMENT_MAP,
@@ -92,17 +93,40 @@ class TestScoreSentiment:
         assert scores[0] == pytest.approx(0.0)
 
     @patch("qsf.agents.nodes.requests.post")
-    def test_batch_processing(self, mock_post):
-        """12 texts should be split into 2 batches: first of 10, second of 2."""
-        first_batch = MagicMock()
-        first_batch.json.return_value = [self._make_hf_response("positive", 0.9)] * 10
-        second_batch = MagicMock()
-        second_batch.json.return_value = [self._make_hf_response("positive", 0.9)] * 2
-        mock_post.side_effect = [first_batch, second_batch]
+    def test_one_call_per_text(self, mock_post):
+        """Each text must trigger exactly one API call and produce one score.
 
-        scores = _score_sentiment(["text"] * 12)
-        assert mock_post.call_count == 2
-        assert len(scores) == 12
+        This guards against batching bugs where the HF API only scores the
+        first item in a batch, silently dropping the rest.
+        """
+        mock_post.return_value.json.return_value = [self._make_hf_response("positive", 0.9)]
+        scores = _score_sentiment(["text"] * 5)
+        assert mock_post.call_count == 5
+        assert len(scores) == 5
+
+    @patch("qsf.agents.nodes.requests.post")
+    def test_failed_item_does_not_stop_others(self, mock_post):
+        """A single failed API call should not prevent the rest from scoring."""
+        good = MagicMock()
+        good.json.return_value = [self._make_hf_response("positive", 0.9)]
+
+        bad = MagicMock()
+        mock_response = MagicMock()
+        mock_response.status_code = 429
+        mock_response.text = "Rate limit exceeded"
+        bad.raise_for_status.side_effect = requests.HTTPError(response=mock_response)
+
+        mock_post.side_effect = [good, bad, good]
+        scores = _score_sentiment(["text1", "text2", "text3"])
+        assert mock_post.call_count == 3
+        assert len(scores) == 2
+
+    @patch("qsf.agents.nodes.requests.post")
+    def test_unexpected_response_format_is_skipped(self, mock_post):
+        """A non-list API response (e.g. error dict) should be skipped gracefully."""
+        mock_post.return_value.json.return_value = {"error": "Model is loading"}
+        scores = _score_sentiment(["text"])
+        assert scores == []
 
     @patch("qsf.agents.nodes.requests.post")
     def test_empty_input(self, mock_post):
