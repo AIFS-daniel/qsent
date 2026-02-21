@@ -140,6 +140,31 @@ Generated outputs and artifacts.
 
 ---
 
+## Sentiment Chart Prototype
+
+A local browser prototype is included at `index.html`. It calls the `/analyze` endpoint and renders three lines over time:
+
+- **Price** (left Y-axis, USD)
+- **News sentiment** (right Y-axis, -1 to 1)
+- **Social sentiment** (right Y-axis, -1 to 1)
+
+![Sentiment chart prototype](docs/images/chart-screenshot.png)
+
+### Running the prototype
+
+1. Start the API (see below)
+2. Open `index.html` directly in your browser:
+
+```bash
+open index.html
+```
+
+3. Type a ticker and click **Analyze**
+
+No build step or dependencies required — Chart.js is loaded from CDN.
+
+---
+
 ## Running the API Locally
 
 ### 1. Install dependencies
