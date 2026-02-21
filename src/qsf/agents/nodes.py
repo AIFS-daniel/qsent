@@ -4,10 +4,13 @@ LangGraph node functions for the sentiment analysis pipeline.
 Each node receives the full pipeline state and returns a dict of
 keys to update in the state. Nodes short-circuit on error.
 """
+import logging
 import math
 import os
 from datetime import datetime, timedelta
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 import pandas as pd
 import praw
@@ -96,32 +99,61 @@ def fetch_market_data(state: dict) -> dict:
     stock_df = hist[["Close", "Volume"]].copy()
     stock_df.index = stock_df.index.date
     stock_df["ror"] = stock_df["Close"].pct_change() * 100
+    days = len(stock_df)
+    logger.info("[%s] fetch_market_data: %d trading days returned", ticker, days)
+    if days < 15:
+        logger.warning("[%s] fetch_market_data: only %d trading days returned, expected ~21", ticker, days)
     return {"stock_df": stock_df}
 
 
 def fetch_news(state: dict) -> dict:
     if state.get("error"):
         return {}
-    return {"news_items": _get_news(state["ticker"])}
+    ticker = state["ticker"]
+    news_items = _get_news(ticker)
+    count = len(news_items)
+    logger.info("[%s] fetch_news: %d articles returned", ticker, count)
+    if count == 0:
+        logger.warning("[%s] fetch_news: 0 articles returned — NewsAPI may be unavailable or quota exceeded", ticker)
+    elif count < 5:
+        logger.warning("[%s] fetch_news: only %d articles returned, sentiment coverage may be sparse", ticker, count)
+    return {"news_items": news_items}
 
 
 def fetch_reddit(state: dict) -> dict:
     if state.get("error"):
         return {}
-    return {"reddit_items": _get_reddit(state["ticker"])}
+    ticker = state["ticker"]
+    reddit_items = _get_reddit(ticker)
+    count = len(reddit_items)
+    logger.info("[%s] fetch_reddit: %d posts returned", ticker, count)
+    if count == 0:
+        logger.warning("[%s] fetch_reddit: 0 posts returned — Reddit API may be unavailable or ticker has low social coverage", ticker)
+    return {"reddit_items": reddit_items}
 
 
 def score_sentiment(state: dict) -> dict:
     if state.get("error"):
         return {}
+    ticker = state["ticker"]
     items = state.get("news_items", []) + state.get("reddit_items", [])
     if not items:
-        return {"error": f"No news or social data found for '{state['ticker']}'"}
+        return {"error": f"No news or social data found for '{ticker}'"}
     scores = _score_sentiment([item["text"] for item in items])
     scored = [
         {**item, "weighted_sentiment": score}
         for item, score in zip(items, scores)
     ]
+    mean_score = sum(scores) / len(scores)
+    logger.info(
+        "[%s] score_sentiment: %d items scored — mean=%.3f, min=%.3f, max=%.3f",
+        ticker, len(scores), mean_score, min(scores), max(scores),
+    )
+    out_of_range = [s for s in scores if not -1.0 <= s <= 1.0]
+    if out_of_range:
+        logger.warning("[%s] score_sentiment: %d scores outside [-1, 1]: %s", ticker, len(out_of_range), out_of_range)
+    if abs(mean_score) < 0.02:
+        logger.warning("[%s] score_sentiment: mean score near zero (%.3f) — model may be returning all-neutral", ticker, mean_score)
     return {"scored_items": scored}
 
 
@@ -155,6 +187,18 @@ def aggregate(state: dict) -> dict:
         start=pd.Timestamp(min(stock_df.index)),
         end=pd.Timestamp(max(stock_df.index)),
     ).map(lambda d: d.date())
+
+    total_days = len(stock_df)
+    news_coverage = news_daily.reindex(stock_df.index).notna().sum()
+    social_coverage = social_daily.reindex(stock_df.index).notna().sum()
+    logger.info(
+        "[%s] aggregate: news coverage %d/%d trading days, social coverage %d/%d trading days",
+        ticker, news_coverage, total_days, social_coverage, total_days,
+    )
+    if news_coverage == 0:
+        logger.warning("[%s] aggregate: no news sentiment aligned to any trading day", ticker)
+    if social_coverage == 0:
+        logger.warning("[%s] aggregate: no social sentiment aligned to any trading day", ticker)
 
     news_aligned = news_daily.reindex(all_dates).ffill().reindex(stock_df.index).fillna(0)
     news_aligned.name = "news_sentiment"
