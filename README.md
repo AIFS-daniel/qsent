@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This project builds an end-to-end, **open-source AI pipeline** for generating and explaining **daily stock price movement predictions** for companies in the **Quantum Computing industry**.
+This project builds an end-to-end, AI pipeline for generating daily stock price movement predictions for companies in the **Quantum Computing industry**.
 
 At a high level, the system:
 
@@ -15,7 +15,6 @@ At a high level, the system:
 7. Exposes results via a **dashboard**, including:
    - The prediction
    - Confidence / uncertainty (where applicable)
-   - A plain-language explanation of *why* the system made that prediction
 
 This repository is structured to support **collaborative development**, **reproducible research**, and eventual deployment as a working product.
 
