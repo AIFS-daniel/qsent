@@ -75,15 +75,50 @@ def _get_reddit(ticker: str, days: int = 30) -> list[dict]:
 
 
 def _score_sentiment(texts: list[str]) -> list[float]:
+    """Score sentiment for each text individually.
+
+    The HuggingFace Inference API for FinBERT only processes the first item
+    when given a batch, so we send one text per request.
+    """
     headers = {"Authorization": f"Bearer {os.getenv('HUGGINGFACE_API_KEY')}"}
     scores = []
-    for i in range(0, len(texts), 10):
-        batch = texts[i:i + 10]
-        response = requests.post(FINBERT_URL, headers=headers, json={"inputs": batch})
-        response.raise_for_status()
-        for result in response.json():
-            top = max(result, key=lambda x: x["score"])
+    failed = 0
+
+    for idx, text in enumerate(texts):
+        try:
+            response = requests.post(FINBERT_URL, headers=headers, json={"inputs": text})
+            response.raise_for_status()
+            result = response.json()
+            if not isinstance(result, list) or not result:
+                logger.warning(
+                    "_score_sentiment: item %d/%d returned unexpected response: %s",
+                    idx + 1, len(texts), str(result)[:200],
+                )
+                failed += 1
+                continue
+            # Single-text requests return [[{label_dicts}]] — unwrap the outer list
+            label_scores = result[0] if isinstance(result[0], list) else result
+            top = max(label_scores, key=lambda x: x["score"])
             scores.append(SENTIMENT_MAP.get(top["label"].lower(), 0) * top["score"])
+        except requests.HTTPError as e:
+            logger.warning(
+                "_score_sentiment: item %d/%d failed — HTTP %s: %s",
+                idx + 1, len(texts), e.response.status_code, e.response.text[:200],
+            )
+            failed += 1
+        except Exception as e:
+            logger.warning(
+                "_score_sentiment: item %d/%d failed — %s: %s",
+                idx + 1, len(texts), type(e).__name__, e,
+            )
+            failed += 1
+
+    if failed:
+        logger.warning(
+            "_score_sentiment: %d/%d items failed to score",
+            failed, len(texts),
+        )
+
     return scores
 
 
@@ -136,7 +171,13 @@ def score_sentiment(state: dict) -> dict:
     if state.get("error"):
         return {}
     ticker = state["ticker"]
-    items = state.get("news_items", []) + state.get("reddit_items", [])
+    news_items = state.get("news_items", [])
+    reddit_items = state.get("reddit_items", [])
+    items = news_items + reddit_items
+    logger.info(
+        "[%s] score_sentiment: received %d news + %d reddit = %d items from state",
+        ticker, len(news_items), len(reddit_items), len(items),
+    )
     if not items:
         return {"error": f"No news or social data found for '{ticker}'"}
     scores = _score_sentiment([item["text"] for item in items])
