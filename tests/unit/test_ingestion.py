@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 from qsf.ingestion.market import YFinanceMarketData
-from qsf.ingestion.news import NewsAPIProvider
+from qsf.ingestion.news import NewsAPIProvider, news_from_date, _article_text
 from qsf.ingestion.social import RedditProvider
 
 
@@ -47,6 +47,44 @@ class TestYFinanceMarketData:
 
 
 # ---------------------------------------------------------------------------
+# news_from_date()
+# ---------------------------------------------------------------------------
+
+class TestNewsFromDate:
+    def test_28_day_window_stays_within_api_limit(self):
+        # NewsAPI free plan has a 30-day exclusive rolling window.
+        # We request 28 days to stay safely within that limit.
+        # 29 and 30 days were tried but both failed in practice — the API server
+        # clock differs from local time, so the boundary can shift by a day
+        # depending on when the request is made. 28 days gives enough buffer.
+        now = datetime(2026, 3, 1, 14, 30, 0)
+        result = news_from_date(now, days=28)
+        assert result == "2026-02-01T14:30:00"
+
+
+# ---------------------------------------------------------------------------
+# _article_text()
+# ---------------------------------------------------------------------------
+
+class TestArticleText:
+    def test_combines_title_and_description(self):
+        article = {"title": "IonQ beats earnings", "description": "Strong Q4 results."}
+        assert _article_text(article) == "IonQ beats earnings. Strong Q4 results."
+
+    def test_falls_back_to_title_when_description_is_none(self):
+        article = {"title": "IonQ beats earnings", "description": None}
+        assert _article_text(article) == "IonQ beats earnings"
+
+    def test_falls_back_to_title_when_description_is_missing(self):
+        article = {"title": "IonQ beats earnings"}
+        assert _article_text(article) == "IonQ beats earnings"
+
+    def test_falls_back_to_title_when_description_is_empty_string(self):
+        article = {"title": "IonQ beats earnings", "description": ""}
+        assert _article_text(article) == "IonQ beats earnings"
+
+
+# ---------------------------------------------------------------------------
 # NewsAPIProvider.get_articles()
 # ---------------------------------------------------------------------------
 
@@ -55,13 +93,13 @@ class TestNewsAPIProvider:
     def test_returns_correctly_shaped_items(self, mock_client_class):
         mock_client_class.return_value.get_everything.return_value = {
             "articles": [
-                {"title": "IonQ beats earnings", "publishedAt": "2026-02-10T10:00:00Z"},
-                {"title": "Quantum stocks rise", "publishedAt": "2026-02-11T14:00:00Z"},
+                {"title": "IonQ beats earnings", "description": "Strong Q4 results.", "publishedAt": "2026-02-10T10:00:00Z"},
+                {"title": "Quantum stocks rise", "description": None, "publishedAt": "2026-02-11T14:00:00Z"},
             ]
         }
         items = NewsAPIProvider().get_articles("IONQ")
         assert len(items) == 2
-        assert items[0]["text"] == "IonQ beats earnings"
+        assert items[0]["text"] == "IonQ beats earnings. Strong Q4 results."
         assert items[0]["date"] == "2026-02-10"
         assert items[0]["source"] == "news"
 
@@ -69,8 +107,8 @@ class TestNewsAPIProvider:
     def test_skips_articles_with_no_title(self, mock_client_class):
         mock_client_class.return_value.get_everything.return_value = {
             "articles": [
-                {"title": None, "publishedAt": "2026-02-10T10:00:00Z"},
-                {"title": "Valid article", "publishedAt": "2026-02-10T10:00:00Z"},
+                {"title": None, "description": "Some description.", "publishedAt": "2026-02-10T10:00:00Z"},
+                {"title": "Valid article", "description": None, "publishedAt": "2026-02-10T10:00:00Z"},
             ]
         }
         items = NewsAPIProvider().get_articles("IONQ")
