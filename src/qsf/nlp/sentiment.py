@@ -42,8 +42,21 @@ class FinBERTModel:
             if idx % 10 == 0:
                 logger.info("FinBERTModel.score: progress %d/%d", idx, len(texts))
             try:
-                response = requests.post(FINBERT_URL, headers=headers, json={"inputs": text}, timeout=HF_REQUEST_TIMEOUT)
-                response.raise_for_status()
+                current_text = text
+                while True:
+                    response = requests.post(FINBERT_URL, headers=headers, json={"inputs": current_text}, timeout=HF_REQUEST_TIMEOUT)
+                    if response.status_code == 400 and "size of tensor" in response.text:
+                        trimmed_len = len(current_text) - 200
+                        if trimmed_len <= 0:
+                            response.raise_for_status()
+                        logger.warning(
+                            "FinBERTModel.score: item %d/%d exceeded token limit (%d chars), trimming to %d chars",
+                            idx + 1, len(texts), len(current_text), trimmed_len,
+                        )
+                        current_text = current_text[:trimmed_len]
+                        continue
+                    response.raise_for_status()
+                    break
                 result = response.json()
                 if not isinstance(result, list) or not result:
                     logger.warning(

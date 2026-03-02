@@ -126,6 +126,27 @@ class TestFinBERTModel:
         assert scores[0] is None
 
     @patch("qsf.nlp.sentiment.requests.post")
+    def test_retries_on_token_limit_error(self, mock_post):
+        """HTTP 400 'size of tensor' triggers a trim-and-retry; final score is returned."""
+        token_error = MagicMock()
+        token_error.status_code = 400
+        token_error.text = '{"error":"The size of tensor a (531) must match the size of tensor b (512) at non-singleton dimension 1"}'
+        token_error.raise_for_status = MagicMock()
+
+        success = MagicMock()
+        success.status_code = 200
+        success.text = ""
+        success.raise_for_status = MagicMock()
+        success.json.return_value = [self._make_hf_response("positive", 0.9)]
+
+        # health check, then item 1 fails once before succeeding on retry
+        mock_post.side_effect = [success, token_error, success]
+        scores = FinBERTModel().score(["a" * 600])
+        assert len(scores) == 1
+        assert scores[0] == pytest.approx(0.9)
+        assert mock_post.call_count == 3  # health check + 1 failed attempt + 1 retry
+
+    @patch("qsf.nlp.sentiment.requests.post")
     def test_empty_input(self, mock_post):
         scores = FinBERTModel().score([])
         assert scores == []
