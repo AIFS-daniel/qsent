@@ -99,7 +99,9 @@ def build_pipeline(
         )
         if not items:
             return {"error": f"No news or social data found for '{ticker}'"}
+        logger.info("[%s] score_sentiment: calling model.score on %d items", ticker, len(items))
         scores = model.score([item["text"] for item in items])
+        logger.info("[%s] score_sentiment: model.score returned", ticker)
         scored = [
             {**item, "weighted_sentiment": score}
             for item, score in zip(items, scores)

@@ -93,7 +93,7 @@ class TestFinBERTModel:
         """
         mock_post.return_value.json.return_value = [self._make_hf_response("positive", 0.9)]
         scores = FinBERTModel().score(["text"] * 5)
-        assert mock_post.call_count == 5
+        assert mock_post.call_count == 6  # 1 health check + 5 item requests
         assert len(scores) == 5
 
     @patch("qsf.nlp.sentiment.requests.post")
@@ -108,9 +108,9 @@ class TestFinBERTModel:
         mock_response.text = "Rate limit exceeded"
         bad.raise_for_status.side_effect = requests.HTTPError(response=mock_response)
 
-        mock_post.side_effect = [good, bad, good]
+        mock_post.side_effect = [good, good, bad, good]  # health check + 3 item requests
         scores = FinBERTModel().score(["text1", "text2", "text3"])
-        assert mock_post.call_count == 3
+        assert mock_post.call_count == 4  # 1 health check + 3 item requests
         assert len(scores) == 2
 
     @patch("qsf.nlp.sentiment.requests.post")

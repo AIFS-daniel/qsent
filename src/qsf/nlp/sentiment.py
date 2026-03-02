@@ -3,6 +3,7 @@ HuggingFace FinBERT sentiment model.
 """
 import logging
 import os
+import time
 
 import requests
 
@@ -10,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 FINBERT_URL = "https://router.huggingface.co/hf-inference/models/ProsusAI/finbert"
 SENTIMENT_MAP = {"positive": 1, "negative": -1, "neutral": 0}
+HF_REQUEST_TIMEOUT = 10  # seconds — applies to health check and per-item scoring requests
 
 
 class FinBERTModel:
@@ -23,9 +25,21 @@ class FinBERTModel:
         scores = []
         failed = 0
 
+        logger.info("FinBERTModel.score: scoring %d items via HuggingFace API (1 request per item)", len(texts))
+        if not texts:
+            return scores
+        try:
+            t0 = time.monotonic()
+            probe = requests.post(FINBERT_URL, headers=headers, json={"inputs": "test"}, timeout=HF_REQUEST_TIMEOUT)
+            elapsed = time.monotonic() - t0
+            logger.info("FinBERTModel.score: HuggingFace health check — HTTP %d in %.2fs", probe.status_code, elapsed)
+        except Exception as e:
+            logger.warning("FinBERTModel.score: HuggingFace health check failed — %s: %s", type(e).__name__, e)
         for idx, text in enumerate(texts):
+            if idx % 10 == 0:
+                logger.info("FinBERTModel.score: progress %d/%d", idx, len(texts))
             try:
-                response = requests.post(FINBERT_URL, headers=headers, json={"inputs": text})
+                response = requests.post(FINBERT_URL, headers=headers, json={"inputs": text}, timeout=HF_REQUEST_TIMEOUT)
                 response.raise_for_status()
                 result = response.json()
                 if not isinstance(result, list) or not result:
@@ -38,7 +52,12 @@ class FinBERTModel:
                 # Single-text requests return [[{label_dicts}]] — unwrap the outer list
                 label_scores = result[0] if isinstance(result[0], list) else result
                 top = max(label_scores, key=lambda x: x["score"])
-                scores.append(SENTIMENT_MAP.get(top["label"].lower(), 0) * top["score"])
+                score = SENTIMENT_MAP.get(top["label"].lower(), 0) * top["score"]
+                logger.info(
+                    "FinBERTModel.score: item %d/%d — %s (%.3f)",
+                    idx + 1, len(texts), top["label"].lower(), score,
+                )
+                scores.append(score)
             except requests.HTTPError as e:
                 logger.warning(
                     "FinBERTModel.score: item %d/%d failed — HTTP %s: %s",
