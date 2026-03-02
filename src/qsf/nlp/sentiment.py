@@ -15,14 +15,17 @@ HF_REQUEST_TIMEOUT = 10  # seconds — applies to health check and per-item scor
 
 
 class FinBERTModel:
-    def score(self, texts: list[str]) -> list[float]:
+    def score(self, texts: list[str]) -> list[float | None]:
         """Score sentiment for each text individually.
 
         The HuggingFace Inference API for FinBERT only processes the first item
         when given a batch, so we send one text per request.
+
+        Returns a list of the same length as the input. Failed items are None
+        rather than omitted, so callers can zip safely without truncation.
         """
         headers = {"Authorization": f"Bearer {os.getenv('HUGGINGFACE_API_KEY')}"}
-        scores = []
+        scores: list[float | None] = [None] * len(texts)
         failed = 0
 
         logger.info("FinBERTModel.score: scoring %d items via HuggingFace API (1 request per item)", len(texts))
@@ -39,8 +42,21 @@ class FinBERTModel:
             if idx % 10 == 0:
                 logger.info("FinBERTModel.score: progress %d/%d", idx, len(texts))
             try:
-                response = requests.post(FINBERT_URL, headers=headers, json={"inputs": text}, timeout=HF_REQUEST_TIMEOUT)
-                response.raise_for_status()
+                current_text = text
+                while True:
+                    response = requests.post(FINBERT_URL, headers=headers, json={"inputs": current_text}, timeout=HF_REQUEST_TIMEOUT)
+                    if response.status_code == 400 and "size of tensor" in response.text:
+                        trimmed_len = len(current_text) - 200
+                        if trimmed_len <= 0:
+                            response.raise_for_status()
+                        logger.warning(
+                            "FinBERTModel.score: item %d/%d exceeded token limit (%d chars), trimming to %d chars",
+                            idx + 1, len(texts), len(current_text), trimmed_len,
+                        )
+                        current_text = current_text[:trimmed_len]
+                        continue
+                    response.raise_for_status()
+                    break
                 result = response.json()
                 if not isinstance(result, list) or not result:
                     logger.warning(
@@ -57,7 +73,7 @@ class FinBERTModel:
                     "FinBERTModel.score: item %d/%d — %s (%.3f)",
                     idx + 1, len(texts), top["label"].lower(), score,
                 )
-                scores.append(score)
+                scores[idx] = score
             except requests.HTTPError as e:
                 logger.warning(
                     "FinBERTModel.score: item %d/%d failed — HTTP %s: %s",

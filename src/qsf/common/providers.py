@@ -28,5 +28,5 @@ class SocialProvider(Protocol):
 
 @runtime_checkable
 class SentimentModel(Protocol):
-    def score(self, texts: list[str]) -> list[float]: ...
-    # floats in [-1, 1]; failed items omitted (shorter list), not raised
+    def score(self, texts: list[str]) -> list[float | None]: ...
+    # Always same length as input. None at an index means that item failed to score.
