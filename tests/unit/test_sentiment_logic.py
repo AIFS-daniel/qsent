@@ -98,7 +98,7 @@ class TestFinBERTModel:
 
     @patch("qsf.nlp.sentiment.requests.post")
     def test_failed_item_does_not_stop_others(self, mock_post):
-        """A single failed API call should not prevent the rest from scoring."""
+        """A failed item returns None at its index — other items are unaffected."""
         good = MagicMock()
         good.json.return_value = [self._make_hf_response("positive", 0.9)]
 
@@ -111,14 +111,19 @@ class TestFinBERTModel:
         mock_post.side_effect = [good, good, bad, good]  # health check + 3 item requests
         scores = FinBERTModel().score(["text1", "text2", "text3"])
         assert mock_post.call_count == 4  # 1 health check + 3 item requests
-        assert len(scores) == 2
+        # Always same length as input — failed item is None, not omitted
+        assert len(scores) == 3
+        assert scores[0] == pytest.approx(0.9)
+        assert scores[1] is None  # failed item
+        assert scores[2] == pytest.approx(0.9)
 
     @patch("qsf.nlp.sentiment.requests.post")
     def test_unexpected_response_format_is_skipped(self, mock_post):
-        """A non-list API response (e.g. error dict) should be skipped gracefully."""
+        """A non-list API response (e.g. error dict) returns None at that index."""
         mock_post.return_value.json.return_value = {"error": "Model is loading"}
         scores = FinBERTModel().score(["text"])
-        assert scores == []
+        assert len(scores) == 1
+        assert scores[0] is None
 
     @patch("qsf.nlp.sentiment.requests.post")
     def test_empty_input(self, mock_post):

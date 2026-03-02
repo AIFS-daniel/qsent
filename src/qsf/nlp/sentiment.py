@@ -15,14 +15,17 @@ HF_REQUEST_TIMEOUT = 10  # seconds — applies to health check and per-item scor
 
 
 class FinBERTModel:
-    def score(self, texts: list[str]) -> list[float]:
+    def score(self, texts: list[str]) -> list[float | None]:
         """Score sentiment for each text individually.
 
         The HuggingFace Inference API for FinBERT only processes the first item
         when given a batch, so we send one text per request.
+
+        Returns a list of the same length as the input. Failed items are None
+        rather than omitted, so callers can zip safely without truncation.
         """
         headers = {"Authorization": f"Bearer {os.getenv('HUGGINGFACE_API_KEY')}"}
-        scores = []
+        scores: list[float | None] = [None] * len(texts)
         failed = 0
 
         logger.info("FinBERTModel.score: scoring %d items via HuggingFace API (1 request per item)", len(texts))
@@ -57,7 +60,7 @@ class FinBERTModel:
                     "FinBERTModel.score: item %d/%d — %s (%.3f)",
                     idx + 1, len(texts), top["label"].lower(), score,
                 )
-                scores.append(score)
+                scores[idx] = score
             except requests.HTTPError as e:
                 logger.warning(
                     "FinBERTModel.score: item %d/%d failed — HTTP %s: %s",

@@ -79,6 +79,8 @@ def build_pipeline(
         reddit_items = social.get_posts(ticker)
         count = len(reddit_items)
         logger.info("[%s] fetch_reddit: %d posts returned", ticker, count)
+        for item in reddit_items:
+            logger.info("[%s] fetch_reddit: post date=%s text=%s", ticker, item["date"], item["text"][:80])
         if count == 0:
             logger.warning(
                 "[%s] fetch_reddit: 0 posts returned — Reddit API may be unavailable or ticker has low social coverage",
@@ -102,16 +104,26 @@ def build_pipeline(
         logger.info("[%s] score_sentiment: calling model.score on %d items", ticker, len(items))
         scores = model.score([item["text"] for item in items])
         logger.info("[%s] score_sentiment: model.score returned", ticker)
+        # Filter out None scores (failed items). scores is always same length as items
+        # so zip never truncates — reddit items at the tail are no longer silently dropped.
         scored = [
             {**item, "weighted_sentiment": score}
             for item, score in zip(items, scores)
+            if score is not None
         ]
-        mean_score = sum(scores) / len(scores)
+        news_scored = sum(1 for s in scored if s["source"] == "news")
+        social_scored = sum(1 for s in scored if s["source"] == "social")
+        logger.info(
+            "[%s] score_sentiment: %d scored after filtering failures — %d news, %d social",
+            ticker, len(scored), news_scored, social_scored,
+        )
+        valid_scores = [s["weighted_sentiment"] for s in scored]
+        mean_score = sum(valid_scores) / len(valid_scores)
         logger.info(
             "[%s] score_sentiment: %d items scored — mean=%.3f, min=%.3f, max=%.3f",
-            ticker, len(scores), mean_score, min(scores), max(scores),
+            ticker, len(valid_scores), mean_score, min(valid_scores), max(valid_scores),
         )
-        out_of_range = [s for s in scores if not -1.0 <= s <= 1.0]
+        out_of_range = [s for s in valid_scores if not -1.0 <= s <= 1.0]
         if out_of_range:
             logger.warning(
                 "[%s] score_sentiment: %d scores outside [-1, 1]: %s",
@@ -166,6 +178,14 @@ def build_pipeline(
             logger.warning("[%s] aggregate: no news sentiment aligned to any trading day", ticker)
         if social_coverage == 0:
             logger.warning("[%s] aggregate: no social sentiment aligned to any trading day", ticker)
+            if not social_daily.empty:
+                logger.warning(
+                    "[%s] aggregate: social posts exist (dates: %s) but none overlap trading days (%s to %s)",
+                    ticker,
+                    sorted(social_daily.index.tolist()),
+                    min(stock_df.index),
+                    max(stock_df.index),
+                )
 
         news_aligned = news_daily.reindex(all_dates).ffill().reindex(stock_df.index).fillna(0)
         news_aligned.name = "news_sentiment"

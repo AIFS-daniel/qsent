@@ -9,7 +9,7 @@ import pytest
 
 from qsf.ingestion.market import YFinanceMarketData
 from qsf.ingestion.news import NewsAPIProvider, news_from_date, _article_text
-from qsf.ingestion.social import RedditProvider
+from qsf.ingestion.social import RedditProvider, _post_text
 
 
 # ---------------------------------------------------------------------------
@@ -123,6 +123,68 @@ class TestNewsAPIProvider:
 
 
 # ---------------------------------------------------------------------------
+# _post_text()
+# ---------------------------------------------------------------------------
+
+class TestPostText:
+    def _make_post(self, title, selftext="", comments=None):
+        post = MagicMock()
+        post.title = title
+        post.selftext = selftext
+        post.comments = MagicMock()
+        post.comments.replace_more = MagicMock()
+        mock_comments = []
+        for body, score in (comments or []):
+            c = MagicMock()
+            c.body = body
+            c.score = score
+            mock_comments.append(c)
+        post.comments.__iter__ = MagicMock(return_value=iter(mock_comments))
+        return post
+
+    def test_title_only_when_no_selftext_or_comments(self):
+        post = self._make_post("IONQ hits new high")
+        assert _post_text(post) == "IONQ hits new high"
+
+    def test_combines_title_and_selftext(self):
+        post = self._make_post("IONQ hits new high", selftext="Strong quarterly results.")
+        assert _post_text(post) == "IONQ hits new high. Strong quarterly results."
+
+    def test_includes_top_comments_by_upvote(self):
+        post = self._make_post(
+            "IONQ earnings",
+            comments=[("Terrible results", 10), ("Great outlook", 50), ("Meh", 2)],
+        )
+        result = _post_text(post)
+        # Highest upvoted comment should appear before lower ones
+        assert "Great outlook" in result
+        assert result.index("Great outlook") < result.index("Terrible results")
+
+    def test_truncates_to_max_chars(self):
+        long_comment = "x" * 600
+        post = self._make_post(
+            "IONQ earnings",
+            comments=[(long_comment, 100), (long_comment, 50), (long_comment, 10)],
+        )
+        result = _post_text(post)
+        from qsf.ingestion.social import REDDIT_MAX_CHARS
+        assert len(result) <= REDDIT_MAX_CHARS
+
+    def test_title_always_preserved(self):
+        long_comment = "x" * 600
+        post = self._make_post(
+            "IONQ earnings",
+            comments=[(long_comment, 100), (long_comment, 50), (long_comment, 10)],
+        )
+        result = _post_text(post)
+        assert result.startswith("IONQ earnings")
+
+    def test_ignores_empty_selftext(self):
+        post = self._make_post("IONQ earnings", selftext="   ")
+        assert _post_text(post) == "IONQ earnings"
+
+
+# ---------------------------------------------------------------------------
 # RedditProvider.get_posts()
 # ---------------------------------------------------------------------------
 
@@ -130,7 +192,11 @@ class TestRedditProvider:
     def _make_post(self, title, days_ago):
         post = MagicMock()
         post.title = title
+        post.selftext = ""
         post.created_utc = (datetime.now() - timedelta(days=days_ago)).timestamp()
+        post.comments = MagicMock()
+        post.comments.replace_more = MagicMock()
+        post.comments.__iter__ = MagicMock(return_value=iter([]))
         return post
 
     @patch("qsf.ingestion.social.praw.Reddit")
@@ -160,3 +226,11 @@ class TestRedditProvider:
         ]
         RedditProvider().get_posts("IONQ")
         assert mock_reddit_class.return_value.subreddit.call_count == 3
+
+    @patch("qsf.ingestion.social.praw.Reddit")
+    def test_calls_replace_more_on_each_post(self, mock_reddit_class):
+        post = self._make_post("IONQ post", days_ago=3)
+        mock_reddit_class.return_value.subreddit.return_value.search.return_value = [post]
+        RedditProvider().get_posts("IONQ")
+        # replace_more called once per post per subreddit (3 subreddits)
+        assert post.comments.replace_more.call_count == 3
