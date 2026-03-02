@@ -104,6 +104,18 @@ def build_pipeline(
         logger.info("[%s] score_sentiment: calling model.score on %d items", ticker, len(items))
         scores = model.score([item["text"] for item in items])
         logger.info("[%s] score_sentiment: model.score returned", ticker)
+        for idx, (item, score) in enumerate(zip(items, scores)):
+            source_label = "news article" if item["source"] == "news" else "social post"
+            if score is None:
+                logger.info(
+                    "[%s] score_sentiment: item %d/%d failed — %s: %s",
+                    ticker, idx + 1, len(items), source_label, item["text"][:80],
+                )
+            else:
+                logger.info(
+                    "[%s] score_sentiment: item %d/%d — %.3f | %s: %s",
+                    ticker, idx + 1, len(items), score, source_label, item["text"][:80],
+                )
         # Filter out None scores (failed items). scores is always same length as items
         # so zip never truncates — reddit items at the tail are no longer silently dropped.
         scored = [
