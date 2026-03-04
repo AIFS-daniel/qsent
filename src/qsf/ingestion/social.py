@@ -9,7 +9,7 @@ import praw
 
 logger = logging.getLogger(__name__)
 
-REDDIT_SUBREDDITS = ["stocks", "investing", "wallstreetbets"]
+REDDIT_SUBREDDITS = ["stocks", "investing", "wallstreetbets", "Superstonk", "StockMarket", "QuantumComputing"]
 REDDIT_MAX_COMMENTS = 5       # top N comments by upvotes to include per post
 REDDIT_MAX_CHARS = 1800       # ~450 BERT tokens — hard cap on combined text per post
 
@@ -56,17 +56,18 @@ def _post_text(post) -> str:
 
 
 class RedditProvider:
-    def get_posts(self, ticker: str, days: int = 30) -> list[dict]:
+    def get_posts(self, ticker: str, company_name: str = "", days: int = 30) -> list[dict]:
         reddit = praw.Reddit(
             client_id=os.getenv("REDDIT_CLIENT_ID"),
             client_secret=os.getenv("REDDIT_CLIENT_SECRET"),
             user_agent=os.getenv("REDDIT_USER_AGENT", "qsent/0.1"),
         )
+        query = f'"{company_name}" OR "${ticker}"' if company_name else f"${ticker}"
         cutoff = datetime.now() - timedelta(days=days)
         posts = []
         for subreddit in REDDIT_SUBREDDITS:
             for post in reddit.subreddit(subreddit).search(
-                ticker, sort="new", time_filter="month", limit=50
+                query, sort="new", time_filter="month", limit=50
             ):
                 created = datetime.fromtimestamp(post.created_utc)
                 if created >= cutoff:

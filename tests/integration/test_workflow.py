@@ -28,6 +28,7 @@ MOCK_SCORES = [0.8, 0.6, 0.7]
 def make_pipeline(history=None, articles=None, posts=None, scores=None):
     market = MagicMock()
     market.get_history.return_value = MOCK_HIST if history is None else history
+    market.get_company_name.return_value = "IonQ, Inc."
 
     news = MagicMock()
     news.get_articles.return_value = MOCK_NEWS if articles is None else articles
@@ -74,5 +75,5 @@ def test_ticker_is_available_throughout_pipeline():
     state = pipeline.invoke({"ticker": "IONQ"})
 
     assert state["ticker"] == "IONQ"
-    mock_news.get_articles.assert_called_once_with("IONQ")
-    mock_social.get_posts.assert_called_once_with("IONQ")
+    mock_news.get_articles.assert_called_once_with("IONQ", "IonQ")
+    mock_social.get_posts.assert_called_once_with("IONQ", "IonQ")

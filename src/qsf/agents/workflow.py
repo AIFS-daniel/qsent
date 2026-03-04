@@ -13,7 +13,7 @@ import pandas as pd
 from langgraph.graph import END, StateGraph
 
 from qsf.common.providers import MarketDataProvider, NewsProvider, SentimentModel, SocialProvider
-from qsf.common.utils import safe
+from qsf.common.utils import safe, company_search_name
 from qsf.ingestion import YFinanceMarketData, NewsAPIProvider, RedditProvider
 from qsf.nlp import FinBERTModel
 
@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 class PipelineState(TypedDict, total=False):
     ticker: str
+    company_name: str
     stock_df: Any
     news_items: list
     reddit_items: list
@@ -51,13 +52,17 @@ def build_pipeline(
                 "[%s] fetch_market_data: only %d trading days returned, expected ~21",
                 ticker, days,
             )
-        return {"stock_df": stock_df}
+        raw_name = market.get_company_name(ticker)
+        company_name = company_search_name(raw_name)
+        logger.info("[%s] fetch_market_data: company name resolved to '%s'", ticker, company_name)
+        return {"stock_df": stock_df, "company_name": company_name}
 
     def _fetch_news(state: dict) -> dict:
         if state.get("error"):
             return {}
         ticker = state["ticker"]
-        news_items = news.get_articles(ticker)
+        company_name = state.get("company_name", "")
+        news_items = news.get_articles(ticker, company_name)
         count = len(news_items)
         logger.info("[%s] fetch_news: %d articles returned", ticker, count)
         if count == 0:
@@ -76,7 +81,8 @@ def build_pipeline(
         if state.get("error"):
             return {}
         ticker = state["ticker"]
-        reddit_items = social.get_posts(ticker)
+        company_name = state.get("company_name", "")
+        reddit_items = social.get_posts(ticker, company_name)
         count = len(reddit_items)
         logger.info("[%s] fetch_reddit: %d posts returned", ticker, count)
         for item in reddit_items:

@@ -17,11 +17,12 @@ def news_from_date(now: datetime, days: int = 28) -> str:
 
 
 class NewsAPIProvider:
-    def get_articles(self, ticker: str, days: int = 28) -> list[dict]:
+    def get_articles(self, ticker: str, company_name: str = "", days: int = 28) -> list[dict]:
         client = NewsApiClient(api_key=os.getenv("NEWS_API_KEY"))
         from_date = news_from_date(datetime.now(), days)
+        query = f'"{company_name}"' if company_name else ticker
         response = client.get_everything(
-            q=ticker,
+            q=query,
             from_param=from_date,
             language="en",
             sort_by="publishedAt",
