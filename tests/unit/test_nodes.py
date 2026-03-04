@@ -37,6 +37,7 @@ def make_providers(
     """Return four mock providers with default happy-path return values."""
     market = MagicMock()
     market.get_history.return_value = MOCK_HIST if history is None else history
+    market.get_company_name.return_value = "IonQ, Inc."
 
     news = MagicMock()
     news.get_articles.return_value = MOCK_NEWS if articles is None else articles
@@ -111,7 +112,7 @@ class TestFetchNews:
         market, news, social, model = make_providers()
         pipeline = build_pipeline(market, news, social, model)
         pipeline.invoke({"ticker": "IONQ"})
-        news.get_articles.assert_called_once_with("IONQ")
+        news.get_articles.assert_called_once_with("IONQ", "IonQ")
 
     def test_skips_on_upstream_error(self):
         market, news, social, model = make_providers(history=pd.DataFrame())
@@ -135,7 +136,7 @@ class TestFetchReddit:
         market, news, social, model = make_providers()
         pipeline = build_pipeline(market, news, social, model)
         pipeline.invoke({"ticker": "IONQ"})
-        social.get_posts.assert_called_once_with("IONQ")
+        social.get_posts.assert_called_once_with("IONQ", "IonQ")
 
     def test_skips_on_upstream_error(self):
         market, news, social, model = make_providers(history=pd.DataFrame())

@@ -12,17 +12,18 @@ import pandas as pd
 @runtime_checkable
 class MarketDataProvider(Protocol):
     def get_history(self, ticker: str, period: str) -> pd.DataFrame: ...
+    def get_company_name(self, ticker: str) -> str: ...
 
 
 @runtime_checkable
 class NewsProvider(Protocol):
-    def get_articles(self, ticker: str, days: int) -> list[dict]: ...
+    def get_articles(self, ticker: str, company_name: str = "", days: int = 28) -> list[dict]: ...
     # each dict: {"text": str, "date": "YYYY-MM-DD", "source": "news"}
 
 
 @runtime_checkable
 class SocialProvider(Protocol):
-    def get_posts(self, ticker: str, days: int) -> list[dict]: ...
+    def get_posts(self, ticker: str, company_name: str = "", days: int = 30) -> list[dict]: ...
     # each dict: {"text": str, "date": "YYYY-MM-DD", "source": "social"}
 
 

@@ -47,6 +47,30 @@ class TestYFinanceMarketData:
 
 
 # ---------------------------------------------------------------------------
+# YFinanceMarketData.get_company_name()
+# ---------------------------------------------------------------------------
+
+class TestYFinanceGetCompanyName:
+    @patch("qsf.ingestion.market.yf.Ticker")
+    def test_returns_long_name(self, mock_ticker):
+        mock_ticker.return_value.info = {"longName": "FormFactor, Inc.", "shortName": "FormFactor Inc."}
+        result = YFinanceMarketData().get_company_name("FORM")
+        assert result == "FormFactor, Inc."
+
+    @patch("qsf.ingestion.market.yf.Ticker")
+    def test_falls_back_to_short_name(self, mock_ticker):
+        mock_ticker.return_value.info = {"longName": None, "shortName": "FormFactor Inc."}
+        result = YFinanceMarketData().get_company_name("FORM")
+        assert result == "FormFactor Inc."
+
+    @patch("qsf.ingestion.market.yf.Ticker")
+    def test_returns_empty_string_when_no_name(self, mock_ticker):
+        mock_ticker.return_value.info = {}
+        result = YFinanceMarketData().get_company_name("FAKE")
+        assert result == ""
+
+
+# ---------------------------------------------------------------------------
 # news_from_date()
 # ---------------------------------------------------------------------------
 
@@ -120,6 +144,20 @@ class TestNewsAPIProvider:
         mock_client_class.return_value.get_everything.return_value = {"articles": []}
         items = NewsAPIProvider().get_articles("IONQ")
         assert items == []
+
+    @patch("qsf.ingestion.news.NewsApiClient")
+    def test_searches_with_ticker_when_no_company_name(self, mock_client_class):
+        mock_client_class.return_value.get_everything.return_value = {"articles": []}
+        NewsAPIProvider().get_articles("FORM")
+        call_kwargs = mock_client_class.return_value.get_everything.call_args.kwargs
+        assert call_kwargs["q"] == "FORM"
+
+    @patch("qsf.ingestion.news.NewsApiClient")
+    def test_searches_with_quoted_company_name(self, mock_client_class):
+        mock_client_class.return_value.get_everything.return_value = {"articles": []}
+        NewsAPIProvider().get_articles("FORM", company_name="FormFactor")
+        call_kwargs = mock_client_class.return_value.get_everything.call_args.kwargs
+        assert call_kwargs["q"] == '"FormFactor"'
 
 
 # ---------------------------------------------------------------------------
@@ -206,7 +244,7 @@ class TestRedditProvider:
             self._make_post("Quantum computing outlook", days_ago=10),
         ]
         items = RedditProvider().get_posts("IONQ")
-        assert len(items) == 6  # 2 posts × 3 subreddits
+        assert len(items) == 12  # 2 posts × 6 subreddits
         assert items[0]["source"] == "social"
         assert items[0]["text"] == "IONQ hits new high"
 
@@ -225,12 +263,26 @@ class TestRedditProvider:
             self._make_post("IONQ post", days_ago=3),
         ]
         RedditProvider().get_posts("IONQ")
-        assert mock_reddit_class.return_value.subreddit.call_count == 3
+        assert mock_reddit_class.return_value.subreddit.call_count == 6
 
     @patch("qsf.ingestion.social.praw.Reddit")
     def test_calls_replace_more_on_each_post(self, mock_reddit_class):
         post = self._make_post("IONQ post", days_ago=3)
         mock_reddit_class.return_value.subreddit.return_value.search.return_value = [post]
         RedditProvider().get_posts("IONQ")
-        # replace_more called once per post per subreddit (3 subreddits)
-        assert post.comments.replace_more.call_count == 3
+        # replace_more called once per post per subreddit (6 subreddits)
+        assert post.comments.replace_more.call_count == 6
+
+    @patch("qsf.ingestion.social.praw.Reddit")
+    def test_searches_with_cashtag_when_no_company_name(self, mock_reddit_class):
+        mock_subreddit = mock_reddit_class.return_value.subreddit.return_value
+        mock_subreddit.search.return_value = []
+        RedditProvider().get_posts("FORM")
+        mock_subreddit.search.assert_called_with("$FORM", sort="new", time_filter="month", limit=50)
+
+    @patch("qsf.ingestion.social.praw.Reddit")
+    def test_searches_with_company_name_and_cashtag(self, mock_reddit_class):
+        mock_subreddit = mock_reddit_class.return_value.subreddit.return_value
+        mock_subreddit.search.return_value = []
+        RedditProvider().get_posts("FORM", company_name="FormFactor")
+        mock_subreddit.search.assert_called_with('"FormFactor" OR "$FORM"', sort="new", time_filter="month", limit=50)

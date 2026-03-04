@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from qsf.common.utils import safe
+from qsf.common.utils import safe, company_search_name
 from qsf.nlp.sentiment import FinBERTModel, SENTIMENT_MAP
 
 
@@ -42,6 +42,36 @@ class TestSafe:
 
     def test_negative(self):
         assert safe(-0.75) == -0.75
+
+
+# ---------------------------------------------------------------------------
+# company_search_name() - legal name → brand name
+# ---------------------------------------------------------------------------
+
+class TestCompanySearchName:
+    def test_strips_inc_after_comma(self):
+        assert company_search_name("FormFactor, Inc.") == "FormFactor"
+
+    def test_strips_inc_after_comma_tesla(self):
+        assert company_search_name("Tesla, Inc.") == "Tesla"
+
+    def test_strips_corporation_suffix(self):
+        assert company_search_name("NVIDIA Corporation") == "NVIDIA"
+
+    def test_strips_inc_without_comma(self):
+        assert company_search_name("Alphabet Inc.") == "Alphabet"
+
+    def test_strips_ltd(self):
+        assert company_search_name("Some Company Ltd.") == "Some Company"
+
+    def test_strips_llc(self):
+        assert company_search_name("Some Company LLC") == "Some Company"
+
+    def test_no_suffix_returned_as_is(self):
+        assert company_search_name("Apple") == "Apple"
+
+    def test_empty_string_returns_empty(self):
+        assert company_search_name("") == ""
 
 
 # ---------------------------------------------------------------------------
