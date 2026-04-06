@@ -4,6 +4,7 @@ Determines whether an article is specifically about a given company/ticker.
 """
 import logging
 import os
+from typing import Iterator
 
 from openai import OpenAI
 
@@ -50,3 +51,43 @@ class RelevanceClassifier:
         beyond_cap = len(articles) - len(articles_to_classify)
         results.extend([False] * beyond_cap)
         return results
+
+    def classify_stream(
+        self,
+        ticker: str,
+        company_name: str,
+        articles: list[dict],
+    ) -> Iterator[tuple[int, dict, bool]]:
+        """Like classify(), but yields (index, article, relevant) one at a time.
+
+        Same cap, prompt, and error-handling behaviour as classify().
+        Positions beyond MAX_ARTICLES are yielded as (index, article, False)
+        without an API call, matching classify()'s beyond_cap padding.
+        """
+        if not articles:
+            return
+
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        for i, article in enumerate(articles[:MAX_ARTICLES]):
+            text = article.get("text", "")
+            prompt = (
+                f"Is this article specifically about {company_name} (ticker: ${ticker}) "
+                f"and relevant to its stock, financials, or business? "
+                f"Reply only 'yes' or 'no'.\n\n{text}"
+            )
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4.1-nano",
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=3,
+                    temperature=0,
+                )
+                relevant = response.choices[0].message.content.strip().lower() == "yes"
+            except Exception as exc:
+                logger.warning("Relevance classification failed: %s", exc)
+                relevant = False
+            yield i, article, relevant
+
+        # Beyond-cap positions: yield False without API call
+        for j, article in enumerate(articles[MAX_ARTICLES:], start=MAX_ARTICLES):
+            yield j, article, False

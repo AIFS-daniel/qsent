@@ -94,3 +94,65 @@ class TestRelevanceClassifier:
         result = RelevanceClassifier().classify("IONQ", "IonQ", [])
         assert result == []
         mock_client.chat.completions.create.assert_not_called()
+
+    # ---- classify_stream() tests ----
+
+    @patch("qsf.nlp.relevance.OpenAI")
+    def test_stream_yields_tuples_with_correct_index(self, mock_openai_cls, monkeypatch):
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_client.chat.completions.create.return_value = _make_openai_response("yes")
+        articles = _make_articles(3)
+        results = list(RelevanceClassifier().classify_stream("IONQ", "IonQ", articles))
+        assert len(results) == 3
+        for i, (index, article, relevant) in enumerate(results):
+            assert index == i
+            assert article == articles[i]
+            assert relevant is True
+
+    @patch("qsf.nlp.relevance.OpenAI")
+    def test_stream_yes_true_no_false(self, mock_openai_cls, monkeypatch):
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_client.chat.completions.create.side_effect = [
+            _make_openai_response(r) for r in ["yes", "no", "yes"]
+        ]
+        articles = _make_articles(3)
+        results = list(RelevanceClassifier().classify_stream("IONQ", "IonQ", articles))
+        assert [r for _, _, r in results] == [True, False, True]
+
+    @patch("qsf.nlp.relevance.OpenAI")
+    def test_stream_api_error_yields_false_no_raise(self, mock_openai_cls, monkeypatch):
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_client.chat.completions.create.side_effect = Exception("API down")
+        articles = _make_articles(2)
+        results = list(RelevanceClassifier().classify_stream("IONQ", "IonQ", articles))
+        assert len(results) == 2
+        assert all(r is False for _, _, r in results)
+
+    @patch("qsf.nlp.relevance.OpenAI")
+    def test_stream_caps_at_max_articles(self, mock_openai_cls, monkeypatch):
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_client.chat.completions.create.return_value = _make_openai_response("yes")
+        articles = _make_articles(MAX_ARTICLES + 5)
+        results = list(RelevanceClassifier().classify_stream("IONQ", "IonQ", articles))
+        assert len(results) == MAX_ARTICLES + 5
+        assert mock_client.chat.completions.create.call_count == MAX_ARTICLES
+        assert all(r is False for _, _, r in results[MAX_ARTICLES:])
+        for expected_i, (index, _, _) in enumerate(results[MAX_ARTICLES:], start=MAX_ARTICLES):
+            assert index == expected_i
+
+    @patch("qsf.nlp.relevance.OpenAI")
+    def test_stream_empty_input_yields_nothing(self, mock_openai_cls, monkeypatch):
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        results = list(RelevanceClassifier().classify_stream("IONQ", "IonQ", []))
+        assert results == []
+        mock_client.chat.completions.create.assert_not_called()
