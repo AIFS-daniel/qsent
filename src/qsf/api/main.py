@@ -1,10 +1,12 @@
 import logging
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from qsf.agents.news_comparison import run_news_comparison, run_news_comparison_stream
 from qsf.agents.workflow import pipeline
 
 load_dotenv()
@@ -28,6 +30,10 @@ class AnalyzeRequest(BaseModel):
     ticker: str
 
 
+class NewsComparisonRequest(BaseModel):
+    tickers: list[str]
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -39,3 +45,23 @@ def analyze(request: AnalyzeRequest):
     if state.get("error"):
         raise HTTPException(status_code=404, detail=state["error"])
     return state["result"]
+
+
+@app.post("/diagnostics/news-comparison")
+def news_comparison(request: NewsComparisonRequest):
+    tickers = [t.upper().strip() for t in request.tickers if t.strip()]
+    if not tickers:
+        raise HTTPException(status_code=422, detail="At least one ticker is required")
+    return run_news_comparison(tickers)
+
+
+@app.get("/diagnostics/news-comparison/stream")
+def news_comparison_stream(tickers: list[str] = Query(...)):
+    clean = [t.upper().strip() for t in tickers if t.strip()]
+    if not clean:
+        raise HTTPException(status_code=422, detail="At least one ticker is required")
+    return StreamingResponse(
+        run_news_comparison_stream(clean),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
