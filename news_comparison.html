@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QSent - News API Comparison</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0f1117;
+      color: #e0e0e0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem;
+      min-height: 100vh;
+    }
+    h1 { font-size: 1.4rem; margin-bottom: 0.5rem; letter-spacing: 0.05em; color: #fff; }
+    .subtitle { font-size: 0.85rem; color: #888; margin-bottom: 1.5rem; }
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+      width: 100%;
+      max-width: 600px;
+    }
+    textarea {
+      padding: 0.5rem 1rem;
+      font-size: 1rem;
+      border-radius: 6px;
+      border: 1px solid #333;
+      background: #1c1f2e;
+      color: #fff;
+      resize: vertical;
+      min-height: 60px;
+      font-family: system-ui, sans-serif;
+    }
+    button {
+      padding: 0.5rem 1.25rem;
+      font-size: 1rem;
+      border-radius: 6px;
+      border: none;
+      background: #4f6ef7;
+      color: #fff;
+      cursor: pointer;
+      align-self: flex-start;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    #status { font-size: 0.85rem; color: #888; margin-bottom: 1.5rem; min-height: 1.2em; }
+    .results {
+      width: 100%;
+      max-width: 900px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+    .ticker-card {
+      background: #1c1f2e;
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+    .ticker-card h2 {
+      font-size: 1.1rem;
+      margin-bottom: 0.25rem;
+      color: #fff;
+    }
+    .ticker-card .company {
+      font-size: 0.8rem;
+      color: #888;
+      margin-bottom: 1rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    th {
+      text-align: left;
+      color: #aaa;
+      font-weight: 500;
+      padding: 0.4rem 0.75rem;
+      border-bottom: 1px solid #2a2d3e;
+    }
+    td {
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid #1a1d2b;
+    }
+    tr:last-child td { border-bottom: none; }
+    .best td { color: #4ecb71; }
+    .worst td { color: #f26c6c; }
+    .error-cell {
+      font-size: 0.8rem;
+      color: #f26c6c;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+  <h1>QSent &mdash; News API Comparison</h1>
+  <p class="subtitle">Compare news providers for ticker relevance precision</p>
+
+  <div class="controls">
+    <textarea id="tickers" placeholder="IONQ, FORM, RGTI">IONQ, FORM, RGTI</textarea>
+    <button id="runBtn" onclick="runComparison()">Run Comparison</button>
+  </div>
+
+  <div id="status">This may take 1-2 minutes per ticker while GPT classifies articles.</div>
+
+  <div id="results" class="results"></div>
+
+  <script>
+    async function runComparison() {
+      const raw = document.getElementById("tickers").value;
+      const tickers = raw.split(",").map(t => t.trim()).filter(t => t.length > 0);
+      if (tickers.length === 0) {
+        document.getElementById("status").textContent = "Please enter at least one ticker.";
+        return;
+      }
+
+      const btn = document.getElementById("runBtn");
+      const status = document.getElementById("status");
+      const resultsEl = document.getElementById("results");
+
+      btn.disabled = true;
+      status.textContent = `Running comparison for ${tickers.join(", ")}... This may take 1-2 minutes.`;
+      resultsEl.innerHTML = "";
+
+      try {
+        const res = await fetch("http://localhost:8000/diagnostics/news-comparison", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tickers }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          status.textContent = `Error: ${err.detail || res.statusText}`;
+          return;
+        }
+
+        const data = await res.json();
+        renderResults(data);
+        status.textContent = "Comparison complete.";
+      } catch (e) {
+        status.textContent = `Failed to connect to API: ${e.message}`;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function renderResults(data) {
+      const resultsEl = document.getElementById("results");
+      resultsEl.innerHTML = "";
+
+      for (const tickerResult of data.results) {
+        const card = document.createElement("div");
+        card.className = "ticker-card";
+
+        const heading = document.createElement("h2");
+        heading.textContent = tickerResult.ticker;
+        card.appendChild(heading);
+
+        const company = document.createElement("div");
+        company.className = "company";
+        company.textContent = tickerResult.company || "(company name unknown)";
+        card.appendChild(company);
+
+        const table = document.createElement("table");
+        table.innerHTML = `
+          <thead>
+            <tr>
+              <th>API</th>
+              <th>Total Articles</th>
+              <th>Relevant</th>
+              <th>Precision (%)</th>
+              <th>Free Tier Limit</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-${tickerResult.ticker}"></tbody>
+        `;
+        card.appendChild(table);
+        resultsEl.appendChild(card);
+
+        const providers = tickerResult.providers;
+        const tbody = document.getElementById(`tbody-${tickerResult.ticker}`);
+
+        // Find best and worst precision among valid (non-error) rows
+        const validPrecisions = providers
+          .filter(p => p.error === null && p.total > 0)
+          .map(p => p.precision);
+
+        const maxPrecision = validPrecisions.length > 0 ? Math.max(...validPrecisions) : null;
+        const minPrecision = validPrecisions.length > 1 ? Math.min(...validPrecisions) : null;
+
+        for (const provider of providers) {
+          const row = document.createElement("tr");
+
+          if (provider.error !== null) {
+            row.innerHTML = `
+              <td>${provider.name}</td>
+              <td colspan="3" class="error-cell">${provider.error}</td>
+              <td>${provider.free_tier}</td>
+            `;
+          } else {
+            const precisionPct = provider.total > 0
+              ? (provider.precision * 100).toFixed(1) + "%"
+              : "—";
+
+            if (maxPrecision !== null && provider.precision === maxPrecision) {
+              row.className = "best";
+            } else if (minPrecision !== null && provider.precision === minPrecision) {
+              row.className = "worst";
+            }
+
+            row.innerHTML = `
+              <td>${provider.name}</td>
+              <td>${provider.total}</td>
+              <td>${provider.relevant}</td>
+              <td>${precisionPct}</td>
+              <td>${provider.free_tier}</td>
+            `;
+          }
+
+          tbody.appendChild(row);
+        }
+      }
+    }
+  </script>
+</body>
+</html>
