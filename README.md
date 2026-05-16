@@ -169,6 +169,16 @@ When you open `http://localhost:8000`, you will be redirected to a login page. C
 
 To log out, visit `http://localhost:8000/auth/logout`.
 
+### Bypassing login during local development
+
+To skip Google SSO when testing locally, start the server with `TEST_MODE=true`:
+
+```bash
+TEST_MODE=true uvicorn qsf.api.main:app --reload
+```
+
+Then visit `http://localhost:8000/auth/test-login` once — it sets a session cookie and drops you straight into the app. This route is only registered when `TEST_MODE=true` and is never available in production.
+
 ### Adding team members
 
 Any Google account can sign in — no manual allowlist needed. If teammates see a Google warning screen during login, make sure the OAuth consent screen is published in Google Cloud Console (APIs & Services → OAuth consent screen → Publish App).
