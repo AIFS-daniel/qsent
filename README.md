@@ -142,7 +142,7 @@ Generated outputs and artifacts.
 
 ## Sentiment Chart Prototype
 
-A local browser prototype is included at `index.html`. It calls the `/analyze` endpoint and renders three lines over time:
+A browser prototype is served directly by the API at `http://localhost:8000`. It renders three lines over time for any ticker:
 
 - **Price** (left Y-axis, USD)
 - **News sentiment** (right Y-axis, -1 to 1)
@@ -153,15 +153,35 @@ A local browser prototype is included at `index.html`. It calls the `/analyze` e
 ### Running the prototype
 
 1. Start the API (see below)
-2. Open `index.html` directly in your browser:
+2. Open `http://localhost:8000` in your browser
+3. Sign in with Google (see Authentication below)
+4. Type a ticker and click **Analyze**
+
+No build step required — Chart.js is loaded from CDN.
+
+---
+
+## Authentication
+
+The app uses **Google SSO**. All API endpoints (except `/health`) require a valid session.
+
+When you open `http://localhost:8000`, you will be redirected to a login page. Click **Sign in with Google** and complete the OAuth flow. Your session is stored in a secure, HttpOnly cookie that expires after 8 hours.
+
+To log out, visit `http://localhost:8000/auth/logout`.
+
+### Bypassing login during local development
+
+To skip Google SSO when testing locally, start the server with `TEST_MODE=true`:
 
 ```bash
-open index.html
+TEST_MODE=true uvicorn qsf.api.main:app --reload
 ```
 
-3. Type a ticker and click **Analyze**
+Then visit `http://localhost:8000/auth/test-login` once — it sets a session cookie and drops you straight into the app. This route is only registered when `TEST_MODE=true` and is never available in production.
 
-No build step or dependencies required — Chart.js is loaded from CDN.
+### Adding team members
+
+Any Google account can sign in — no manual allowlist needed. If teammates see a Google warning screen during login, make sure the OAuth consent screen is published in Google Cloud Console (APIs & Services → OAuth consent screen → Publish App).
 
 ---
 
@@ -175,9 +195,16 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
+MacOS
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
 ### 2. Set up environment variables
 
-Copy the example file and fill in your API keys:
+Copy the example file and fill in your keys:
 
 ```bash
 cp .env.example .env
@@ -185,12 +212,22 @@ cp .env.example .env
 
 Required keys:
 ```
+# Google OAuth (see Authentication section above)
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+SECRET_KEY=                  # generate with: openssl rand -hex 32
+BASE_URL=http://localhost:8000
+SECURE_COOKIES=false
+
+# Data sources
 NEWS_API_KEY=
 REDDIT_CLIENT_ID=
 REDDIT_CLIENT_SECRET=
 REDDIT_USER_AGENT=qsent/0.1
 HUGGINGFACE_API_KEY=
 ```
+
+To get `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, create an OAuth 2.0 client in [Google Cloud Console](https://console.cloud.google.com) under APIs & Services → Credentials. Set the authorized redirect URI to `http://localhost:8000/auth/callback`.
 
 ### 3. Start the server
 
@@ -234,9 +271,25 @@ INFO:     127.0.0.1:PORT - "POST /analyze HTTP/1.1" 200 OK
 
 ### 6. Run the tests
 
+Unit and integration tests:
 ```bash
-pytest tests/
+pytest tests/unit/ tests/integration/
 ```
+
+E2E tests (Playwright) must be run manually on your local machine — they require a running server and a real browser. They cannot be run by automated test runners (e.g. CI agents) without additional setup.
+
+```bash
+# First time only — install Chromium
+playwright install chromium
+
+# Terminal 1: start the server with test mode enabled
+TEST_MODE=true uvicorn qsf.api.main:app --reload
+
+# Terminal 2: run E2E tests
+pytest tests/e2e/
+```
+
+If `playwright` is not found, make sure your venv is active (`source .venv/bin/activate`).
 
 ---
 

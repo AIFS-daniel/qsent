@@ -79,6 +79,12 @@
   <script>
     let chartInstance = null;
 
+    // Verify session on load; redirect to login if not authenticated
+    (async () => {
+      const res = await fetch("/auth/me", { credentials: "include" });
+      if (!res.ok) window.location.href = "/login.html";
+    })();
+
     async function runAnalysis() {
       const ticker = document.getElementById("ticker").value.trim().toUpperCase();
       if (!ticker) return;
@@ -91,13 +97,18 @@
       document.getElementById("chartSection").style.display = "none";
 
       try {
-        const res = await fetch("http://localhost:8000/analyze", {
+        const res = await fetch("/analyze", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ticker }),
+          credentials: "include",
         });
 
         if (!res.ok) {
+          if (res.status === 401) {
+            window.location.href = "/login.html";
+            return;
+          }
           const err = await res.json();
           status.textContent = `Error: ${err.detail || res.statusText}`;
           return;
