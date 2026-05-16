@@ -276,7 +276,8 @@ Unit and integration tests:
 pytest tests/unit/ tests/integration/
 ```
 
-E2E tests (Playwright) require a running server and the Chromium browser installed:
+E2E tests (Playwright) must be run manually on your local machine — they require a running server and a real browser. They cannot be run by automated test runners (e.g. CI agents) without additional setup.
+
 ```bash
 # First time only — install Chromium
 playwright install chromium
