@@ -140,6 +140,26 @@ Generated outputs and artifacts.
 
 ---
 
+## Forecasting Module
+
+The forecasting module (`src/qsf/forecasting/`) takes historical market data combined with the sentiment scores produced by the pipeline and trains classical ML models to predict next-day price movement. It uses a two-stage approach:
+
+- **Stage 1** — direction classification (up or down) using Logistic Regression, Random Forest, or XGBoost
+- **Stage 2** — magnitude regression (how much) using Ridge or XGBoost
+
+The best model is selected by Sharpe ratio. Results include accuracy, Sharpe, max drawdown, and total return from a simulated trading strategy.
+
+**How it connects to the sentiment pipeline:** The `/analyze` endpoint already outputs `news_sentiment` and `social_sentiment` per day — exactly what the forecasting pipeline expects. The forecasting pipeline fetches its own 2-year market data window via yfinance and uses sentiment as an overlay on top of technical indicators (RSI, volatility, moving averages, momentum).
+
+**Current status:** The module is implemented but not yet wired into the API. A `/forecast` endpoint is the planned next step.
+
+**Optional dependency:** XGBoost models require an extra install:
+```bash
+pip install -e ".[forecasting-extra]"
+```
+
+---
+
 ## Sentiment Chart Prototype
 
 A browser prototype is served directly by the API at `http://localhost:8000`. It renders three lines over time for any ticker:
