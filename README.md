@@ -271,9 +271,24 @@ INFO:     127.0.0.1:PORT - "POST /analyze HTTP/1.1" 200 OK
 
 ### 6. Run the tests
 
+Unit and integration tests:
 ```bash
-pytest tests/
+pytest tests/unit/ tests/integration/
 ```
+
+E2E tests (Playwright) require a running server and the Chromium browser installed:
+```bash
+# First time only — install Chromium
+playwright install chromium
+
+# Terminal 1: start the server with test mode enabled
+TEST_MODE=true uvicorn qsf.api.main:app --reload
+
+# Terminal 2: run E2E tests
+pytest tests/e2e/
+```
+
+If `playwright` is not found, make sure your venv is active (`source .venv/bin/activate`).
 
 ---
 
