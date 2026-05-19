@@ -34,10 +34,10 @@ def _sanitize_picture(url: str) -> str:
     return ""
 
 
-def create_session_token(email: str, name: str, picture: str = "") -> str:
+def create_session_token(email: str, name: str, picture: str = "", google_sub: str = "") -> str:
     expire = datetime.now(timezone.utc) + timedelta(hours=SESSION_DURATION_HOURS)
     return jwt.encode(
-        {"sub": email, "name": name, "picture": picture, "exp": expire},
+        {"sub": email, "google_sub": google_sub, "name": name, "picture": picture, "exp": expire},
         SECRET_KEY,
         algorithm=ALGORITHM,
     )
@@ -52,7 +52,12 @@ async def get_current_user(qsent_session: str | None = Cookie(default=None)) -> 
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
         payload = decode_session_token(qsent_session)
-        return {"email": payload["sub"], "name": payload["name"], "picture": payload.get("picture", "")}
+        return {
+            "email": payload["sub"],
+            "google_sub": payload.get("google_sub", ""),
+            "name": payload["name"],
+            "picture": payload.get("picture", ""),
+        }
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
 
@@ -102,6 +107,7 @@ async def callback(request: Request):
         email=userinfo["email"],
         name=userinfo.get("name", userinfo["email"]),
         picture=_sanitize_picture(userinfo.get("picture", "")),
+        google_sub=userinfo.get("sub", ""),
     )
 
     response = RedirectResponse(url="/")
@@ -133,7 +139,7 @@ async def me(user: dict = Depends(get_current_user)):
 if os.environ.get("TEST_MODE") == "true":
     @router.get("/test-login")
     async def test_login():
-        token = create_session_token(email="test@example.com", name="Test User")
+        token = create_session_token(email="test@example.com", name="Test User", google_sub="test-user-sub")
         response = RedirectResponse(url="/")
         response.set_cookie(
             key=COOKIE_NAME,

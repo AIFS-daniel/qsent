@@ -4,7 +4,6 @@ LangGraph pipeline for sentiment analysis.
 Graph:
     fetch_market_data → fetch_news → fetch_reddit → score_sentiment → aggregate
 """
-import logging
 from datetime import datetime
 from typing import Any, Optional
 from typing_extensions import TypedDict
@@ -12,16 +11,18 @@ from typing_extensions import TypedDict
 import pandas as pd
 from langgraph.graph import END, StateGraph
 
+from qsf.common.logging import get_current_trace, get_logger
 from qsf.common.providers import MarketDataProvider, NewsProvider, SentimentModel, SocialProvider
 from qsf.common.utils import safe, company_search_name
 from qsf.ingestion import YFinanceMarketData, NewsAPIProvider, RedditProvider
 from qsf.nlp import FinBERTModel
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class PipelineState(TypedDict, total=False):
     ticker: str
+    trace_id: str
     company_name: str
     stock_df: Any
     news_items: list
@@ -39,8 +40,11 @@ def build_pipeline(
 ):
     def _fetch_market_data(state: dict) -> dict:
         ticker = state["ticker"]
+        trace = get_current_trace()
+        span = trace.span(name="fetch_market_data", input={"ticker": ticker}) if trace else None
         hist = market.get_history(ticker, "30d")
         if hist.empty:
+            if span: span.end(output={"error": "no price data"}, level="ERROR")
             return {"error": f"No price data found for '{ticker}'"}
         stock_df = hist[["Close", "Volume"]].copy()
         stock_df.index = stock_df.index.date
@@ -55,6 +59,7 @@ def build_pipeline(
         raw_name = market.get_company_name(ticker)
         company_name = company_search_name(raw_name)
         logger.info("[%s] fetch_market_data: company name resolved to '%s'", ticker, company_name)
+        if span: span.end(output={"trading_days": days, "company_name": company_name})
         return {"stock_df": stock_df, "company_name": company_name}
 
     def _fetch_news(state: dict) -> dict:
@@ -62,19 +67,16 @@ def build_pipeline(
             return {}
         ticker = state["ticker"]
         company_name = state.get("company_name", "")
+        trace = get_current_trace()
+        span = trace.span(name="fetch_news", input={"ticker": ticker, "company_name": company_name}) if trace else None
         news_items = news.get_articles(ticker, company_name)
         count = len(news_items)
         logger.info("[%s] fetch_news: %d articles returned", ticker, count)
         if count == 0:
-            logger.warning(
-                "[%s] fetch_news: 0 articles returned — NewsAPI may be unavailable or quota exceeded",
-                ticker,
-            )
+            logger.warning("[%s] fetch_news: 0 articles returned — NewsAPI may be unavailable or quota exceeded", ticker)
         elif count < 5:
-            logger.warning(
-                "[%s] fetch_news: only %d articles returned, sentiment coverage may be sparse",
-                ticker, count,
-            )
+            logger.warning("[%s] fetch_news: only %d articles returned, sentiment coverage may be sparse", ticker, count)
+        if span: span.end(output={"count": count})
         return {"news_items": news_items}
 
     def _fetch_reddit(state: dict) -> dict:
@@ -82,16 +84,16 @@ def build_pipeline(
             return {}
         ticker = state["ticker"]
         company_name = state.get("company_name", "")
+        trace = get_current_trace()
+        span = trace.span(name="fetch_reddit", input={"ticker": ticker, "company_name": company_name}) if trace else None
         reddit_items = social.get_posts(ticker, company_name)
         count = len(reddit_items)
         logger.info("[%s] fetch_reddit: %d posts returned", ticker, count)
         for item in reddit_items:
             logger.info("[%s] fetch_reddit: post date=%s text=%s", ticker, item["date"], item["text"][:80])
         if count == 0:
-            logger.warning(
-                "[%s] fetch_reddit: 0 posts returned — Reddit API may be unavailable or ticker has low social coverage",
-                ticker,
-            )
+            logger.warning("[%s] fetch_reddit: 0 posts returned — Reddit API may be unavailable or ticker has low social coverage", ticker)
+        if span: span.end(output={"count": count})
         return {"reddit_items": reddit_items}
 
     def _score_sentiment(state: dict) -> dict:
@@ -107,6 +109,8 @@ def build_pipeline(
         )
         if not items:
             return {"error": f"No news or social data found for '{ticker}'"}
+        trace = get_current_trace()
+        span = trace.span(name="score_sentiment", input={"news": len(news_items), "social": len(reddit_items)}) if trace else None
         logger.info("[%s] score_sentiment: calling model.score on %d items", ticker, len(items))
         scores = model.score([item["text"] for item in items])
         logger.info("[%s] score_sentiment: model.score returned", ticker)
@@ -152,6 +156,7 @@ def build_pipeline(
                 "[%s] score_sentiment: mean score near zero (%.3f) — model may be returning all-neutral",
                 ticker, mean_score,
             )
+        if span: span.end(output={"scored": len(scored), "mean": round(mean_score, 4), "failed": len(items) - len(scored)})
         return {"scored_items": scored}
 
     def _aggregate(state: dict) -> dict:
@@ -161,6 +166,9 @@ def build_pipeline(
         ticker = state["ticker"]
         stock_df: pd.DataFrame = state["stock_df"]
         scored_items: list[dict] = state["scored_items"]
+
+        trace = get_current_trace()
+        span = trace.span(name="aggregate", input={"scored_items": len(scored_items)}) if trace else None
 
         df = pd.DataFrame(scored_items)
         df["date"] = pd.to_datetime(df["date"]).dt.date
@@ -254,6 +262,7 @@ def build_pipeline(
                 for idx, row in merged.iterrows()
             ],
         }
+        if span: span.end(output={"sentiment_score": safe(overall_sentiment), "trend": trend, "data_points": len(scored_items)})
         return {"result": result}
 
     graph = StateGraph(PipelineState)

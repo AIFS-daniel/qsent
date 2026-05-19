@@ -208,6 +208,52 @@ No build step required — Chart.js is loaded from CDN.
 
 ---
 
+## Observability
+
+Every `/analyze` request produces two correlated records:
+
+**Structured logs (stdout)**
+Every log line carries a `trace_id` and `user_id` (Google's opaque `sub`, never email). In development, logs are pretty-printed. Set `LOG_FORMAT=json` for machine-readable output.
+
+```
+2026-05-18T14:32:01Z [info] request.received trace_id=d9a04fcb user_id=116234567890 method=POST path=/analyze
+2026-05-18T14:32:15Z [info] request.completed trace_id=d9a04fcb status=200 duration_ms=14200
+```
+
+Query by trace ID: `cat logs/app.log | jq 'select(.trace_id == "d9a04fcb")'`
+
+The `X-Trace-ID` header on every response contains the trace ID.
+
+**Langfuse trace UI**
+
+Langfuse records a full agentic trace per request: five pipeline node spans, child spans per external API call (NewsAPI, Reddit, yfinance), and a generation entry per FinBERT call.
+
+Start Langfuse locally (requires Docker):
+
+```bash
+docker compose -f docker-compose.langfuse.yml up -d
+```
+
+Then open http://localhost:3000, sign up, create a project, and copy the API keys into `.env`:
+
+```
+LANGFUSE_PUBLIC_KEY=<your public key>
+LANGFUSE_SECRET_KEY=<your secret key>
+LANGFUSE_HOST=http://localhost:3000
+```
+
+Restart the FastAPI server — traces will appear in the UI within seconds of each request.
+
+If `LANGFUSE_PUBLIC_KEY` is not set, tracing is silently disabled and the pipeline runs normally.
+
+**Tracing a specific user**
+
+Ask the user to open `http://localhost:8000/auth/me` — it returns their `google_sub` (an opaque permanent ID, not their email). Search Langfuse or grep logs by that value.
+
+See [ADR 006](docs/decisions/006-observability-structlog-langfuse.md) for the full rationale.
+
+---
+
 ## Authentication
 
 The app uses **Google SSO**. All API endpoints (except `/health`) require a valid session.
@@ -272,6 +318,11 @@ REDDIT_CLIENT_ID=
 REDDIT_CLIENT_SECRET=
 REDDIT_USER_AGENT=qsent/0.1
 HUGGINGFACE_API_KEY=
+
+# Observability (optional — pipeline runs without these)
+LANGFUSE_PUBLIC_KEY=         # from Langfuse project settings
+LANGFUSE_SECRET_KEY=
+LANGFUSE_HOST=http://localhost:3000
 ```
 
 To get `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, create an OAuth 2.0 client in [Google Cloud Console](https://console.cloud.google.com) under APIs & Services → Credentials. Set the authorized redirect URI to `http://localhost:8000/auth/callback`.

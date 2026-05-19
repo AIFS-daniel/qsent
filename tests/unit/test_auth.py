@@ -47,6 +47,18 @@ def test_create_session_token_picture_defaults_to_empty():
     assert payload["picture"] == ""
 
 
+def test_create_session_token_stores_google_sub():
+    token = create_session_token("user@example.com", "Test User", google_sub="116234567890")
+    payload = decode_session_token(token)
+    assert payload["google_sub"] == "116234567890"
+
+
+def test_create_session_token_google_sub_defaults_to_empty():
+    token = create_session_token("user@example.com", "Test User")
+    payload = decode_session_token(token)
+    assert payload["google_sub"] == ""
+
+
 def test_decode_expired_token_raises():
     from jose import JWTError
 
@@ -78,6 +90,20 @@ def test_me_returns_user_with_valid_cookie():
     assert data["email"] == "user@example.com"
     assert data["name"] == "Test User"
     assert data["picture"] == ""
+
+
+def test_me_returns_google_sub():
+    token = create_session_token("user@example.com", "Test User", google_sub="116234567890")
+    response = client.get("/auth/me", cookies={COOKIE_NAME: token})
+    assert response.status_code == 200
+    assert response.json()["google_sub"] == "116234567890"
+
+
+def test_me_returns_empty_google_sub_when_absent():
+    token = create_session_token("user@example.com", "Test User")
+    response = client.get("/auth/me", cookies={COOKIE_NAME: token})
+    assert response.status_code == 200
+    assert response.json()["google_sub"] == ""
 
 
 def test_me_returns_picture_when_provided():
@@ -162,6 +188,33 @@ def test_callback_sets_session_cookie(mocker):
     )
     assert response.status_code in (302, 307)
     assert COOKIE_NAME in response.cookies
+
+
+def test_callback_captures_google_sub(mocker):
+    state = "test-state-with-sub"
+
+    mock_instance = AsyncMock()
+    mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+    mock_instance.__aexit__ = AsyncMock(return_value=None)
+    mock_instance.fetch_token = AsyncMock(return_value={"access_token": "fake-token"})
+    mock_userinfo = MagicMock()
+    mock_userinfo.json.return_value = {
+        "email": "user@example.com",
+        "name": "Test User",
+        "sub": "116234567890",
+    }
+    mock_instance.get = AsyncMock(return_value=mock_userinfo)
+    mocker.patch("qsf.api.auth.AsyncOAuth2Client", return_value=mock_instance)
+
+    response = client.get(
+        f"/auth/callback?code=fake-code&state={state}",
+        cookies={"oauth_state": state},
+        follow_redirects=False,
+    )
+    assert response.status_code in (302, 307)
+    session_cookie = response.cookies[COOKIE_NAME]
+    payload = decode_session_token(session_cookie)
+    assert payload["google_sub"] == "116234567890"
 
 
 # ---------------------------------------------------------------------------
