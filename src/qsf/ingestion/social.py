@@ -1,13 +1,14 @@
 """
 Reddit social media provider.
 """
-import logging
 import os
 from datetime import datetime, timedelta
 
 import praw
 
-logger = logging.getLogger(__name__)
+from qsf.common.logging import get_current_trace, get_logger
+
+logger = get_logger(__name__)
 
 REDDIT_SUBREDDITS = ["stocks", "investing", "wallstreetbets", "Superstonk", "StockMarket", "QuantumComputing"]
 REDDIT_MAX_COMMENTS = 5       # top N comments by upvotes to include per post
@@ -64,8 +65,11 @@ class RedditProvider:
         )
         query = f'"{company_name}" OR "${ticker}"' if company_name else f"${ticker}"
         cutoff = datetime.now() - timedelta(days=days)
+        trace = get_current_trace()
         posts = []
         for subreddit in REDDIT_SUBREDDITS:
+            span = trace.span(name="reddit.search", input={"subreddit": subreddit, "query": query}) if trace else None
+            count = 0
             for post in reddit.subreddit(subreddit).search(
                 query, sort="new", time_filter="month", limit=50
             ):
@@ -76,4 +80,6 @@ class RedditProvider:
                         "date": created.strftime("%Y-%m-%d"),
                         "source": "social",
                     })
+                    count += 1
+            if span: span.end(output={"count": count})
         return posts

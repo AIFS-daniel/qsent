@@ -1,13 +1,14 @@
 """
 HuggingFace FinBERT sentiment model.
 """
-import logging
 import os
 import time
 
 import requests
 
-logger = logging.getLogger(__name__)
+from qsf.common.logging import get_current_trace, get_logger
+
+logger = get_logger(__name__)
 
 FINBERT_URL = "https://router.huggingface.co/hf-inference/models/ProsusAI/finbert"
 SENTIMENT_MAP = {"positive": 1, "negative": -1, "neutral": 0}
@@ -27,6 +28,7 @@ class FinBERTModel:
         headers = {"Authorization": f"Bearer {os.getenv('HUGGINGFACE_API_KEY')}"}
         scores: list[float | None] = [None] * len(texts)
         failed = 0
+        trace = get_current_trace()
 
         logger.info("FinBERTModel.score: scoring %d items via HuggingFace API (1 request per item)", len(texts))
         if not texts:
@@ -63,6 +65,7 @@ class FinBERTModel:
                         "FinBERTModel.score: item %d/%d returned unexpected response: %s",
                         idx + 1, len(texts), str(result)[:200],
                     )
+                    if trace: trace.generation(name="finbert", model="ProsusAI/finbert", input=current_text[:200], level="WARNING", status_message="unexpected_response")
                     failed += 1
                     continue
                 # Single-text requests return [[{label_dicts}]] — unwrap the outer list
@@ -73,18 +76,21 @@ class FinBERTModel:
                     "FinBERTModel.score: item %d/%d — %s (%.3f)",
                     idx + 1, len(texts), top["label"].lower(), score,
                 )
+                if trace: trace.generation(name="finbert", model="ProsusAI/finbert", input=current_text[:200], output=str(round(score, 4)))
                 scores[idx] = score
             except requests.HTTPError as e:
                 logger.warning(
                     "FinBERTModel.score: item %d/%d failed — HTTP %s: %s",
                     idx + 1, len(texts), e.response.status_code, e.response.text[:200],
                 )
+                if trace: trace.generation(name="finbert", model="ProsusAI/finbert", input=text[:200], level="ERROR", status_message=f"HTTP {e.response.status_code}")
                 failed += 1
             except Exception as e:
                 logger.warning(
                     "FinBERTModel.score: item %d/%d failed — %s: %s",
                     idx + 1, len(texts), type(e).__name__, e,
                 )
+                if trace: trace.generation(name="finbert", model="ProsusAI/finbert", input=text[:200], level="ERROR", status_message=f"{type(e).__name__}: {e}")
                 failed += 1
 
         if failed:
