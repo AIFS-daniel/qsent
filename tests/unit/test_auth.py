@@ -32,6 +32,21 @@ def test_create_and_decode_session_token():
     assert payload["name"] == "Test User"
 
 
+def test_create_session_token_with_picture():
+    picture_url = "https://example.com/pic.jpg"
+    token = create_session_token("user@example.com", "Test User", picture=picture_url)
+    payload = decode_session_token(token)
+    assert payload["sub"] == "user@example.com"
+    assert payload["name"] == "Test User"
+    assert payload["picture"] == picture_url
+
+
+def test_create_session_token_picture_defaults_to_empty():
+    token = create_session_token("user@example.com", "Test User")
+    payload = decode_session_token(token)
+    assert payload["picture"] == ""
+
+
 def test_decode_expired_token_raises():
     from jose import JWTError
 
@@ -62,6 +77,18 @@ def test_me_returns_user_with_valid_cookie():
     data = response.json()
     assert data["email"] == "user@example.com"
     assert data["name"] == "Test User"
+    assert data["picture"] == ""
+
+
+def test_me_returns_picture_when_provided():
+    picture_url = "https://example.com/pic.jpg"
+    token = create_session_token("user@example.com", "Test User", picture=picture_url)
+    response = client.get("/auth/me", cookies={COOKIE_NAME: token})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["email"] == "user@example.com"
+    assert data["name"] == "Test User"
+    assert data["picture"] == picture_url
 
 
 def test_me_rejects_invalid_token():
@@ -140,6 +167,27 @@ def test_callback_sets_session_cookie(mocker):
 # ---------------------------------------------------------------------------
 # /auth/login
 # ---------------------------------------------------------------------------
+
+
+def test_sanitize_picture_rejects_non_google_url():
+    from qsf.api.auth import _sanitize_picture
+    assert _sanitize_picture("https://evil.com/img.jpg") == ""
+
+
+def test_sanitize_picture_rejects_javascript_uri():
+    from qsf.api.auth import _sanitize_picture
+    assert _sanitize_picture("javascript:alert(1)") == ""
+
+
+def test_sanitize_picture_accepts_google_url():
+    from qsf.api.auth import _sanitize_picture
+    url = "https://lh3.googleusercontent.com/a/photo.jpg"
+    assert _sanitize_picture(url) == url
+
+
+def test_sanitize_picture_rejects_empty_string():
+    from qsf.api.auth import _sanitize_picture
+    assert _sanitize_picture("") == ""
 
 
 def test_login_redirects_to_google_and_sets_state_cookie(mocker):

@@ -1,4 +1,5 @@
 import os
+import re
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -24,11 +25,19 @@ GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 
+_ALLOWED_PICTURE_ORIGINS = re.compile(r"^https://lh[0-9]+\.googleusercontent\.com/")
 
-def create_session_token(email: str, name: str) -> str:
+
+def _sanitize_picture(url: str) -> str:
+    if url and _ALLOWED_PICTURE_ORIGINS.match(url):
+        return url
+    return ""
+
+
+def create_session_token(email: str, name: str, picture: str = "") -> str:
     expire = datetime.now(timezone.utc) + timedelta(hours=SESSION_DURATION_HOURS)
     return jwt.encode(
-        {"sub": email, "name": name, "exp": expire},
+        {"sub": email, "name": name, "picture": picture, "exp": expire},
         SECRET_KEY,
         algorithm=ALGORITHM,
     )
@@ -43,7 +52,7 @@ async def get_current_user(qsent_session: str | None = Cookie(default=None)) -> 
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
         payload = decode_session_token(qsent_session)
-        return {"email": payload["sub"], "name": payload["name"]}
+        return {"email": payload["sub"], "name": payload["name"], "picture": payload.get("picture", "")}
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
 
@@ -92,6 +101,7 @@ async def callback(request: Request):
     session_token = create_session_token(
         email=userinfo["email"],
         name=userinfo.get("name", userinfo["email"]),
+        picture=_sanitize_picture(userinfo.get("picture", "")),
     )
 
     response = RedirectResponse(url="/")
