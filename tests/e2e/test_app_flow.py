@@ -62,3 +62,38 @@ def test_logout_redirects_to_login(page: Page, base_url: str):
     page.goto(f"{base_url}/auth/logout")
     page.wait_for_url(f"{base_url}/login.html", timeout=5000)
     expect(page).to_have_url(f"{base_url}/login.html")
+
+
+def test_profile_button_is_visible(page: Page, base_url: str):
+    page.goto(base_url)
+    expect(page.locator("#profileBtn")).to_be_visible()
+
+
+def test_profile_dropdown_opens_on_click(page: Page, base_url: str):
+    page.goto(base_url)
+    expect(page.locator("#profileDropdown")).not_to_be_visible()
+    page.click("#profileBtn")
+    expect(page.locator("#profileDropdown")).to_be_visible()
+
+
+def test_profile_dropdown_shows_user_info(page: Page, base_url: str):
+    page.goto(base_url)
+    page.click("#profileBtn")
+    expect(page.locator("#pdName")).to_have_text("Test User")
+    expect(page.locator("#pdEmail")).to_have_text("test@example.com")
+
+
+def test_profile_dropdown_closes_on_outside_click(page: Page, base_url: str):
+    page.goto(base_url)
+    page.click("#profileBtn")
+    expect(page.locator("#profileDropdown")).to_be_visible()
+    page.click("h1")
+    expect(page.locator("#profileDropdown")).not_to_be_visible()
+
+
+def test_signout_link_navigates_to_logout(page: Page, base_url: str):
+    page.goto(base_url)
+    page.click("#profileBtn")
+    page.click(".pd-signout")
+    page.wait_for_url(f"{base_url}/login.html", timeout=5000)
+    expect(page).to_have_url(f"{base_url}/login.html")

@@ -59,9 +59,98 @@
       color: #aaa;
     }
     .meta span b { color: #fff; }
+
+    header {
+      position: relative;
+      width: 100%;
+      display: flex;
+      justify-content: flex-end;
+      padding: 0 2rem 1rem;
+    }
+    .profile-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      background: #2e3250;
+      overflow: hidden;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #e0e0e0;
+    }
+    .profile-btn img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 50%;
+      display: block;
+    }
+    .profile-dropdown {
+      display: none;
+      position: absolute;
+      top: calc(100% + 4px);
+      right: 2rem;
+      background: #1c1f2e;
+      border: 1px solid #333;
+      border-radius: 8px;
+      min-width: 220px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      z-index: 100;
+    }
+    .profile-dropdown.open { display: block; }
+    .profile-dropdown .pd-info {
+      padding: 0.85rem 1rem;
+    }
+    .profile-dropdown .pd-name {
+      font-weight: 600;
+      color: #fff;
+      font-size: 0.9rem;
+      margin-bottom: 0.2rem;
+    }
+    .profile-dropdown .pd-email {
+      font-size: 0.78rem;
+      color: #888;
+    }
+    .profile-dropdown .pd-divider {
+      border: none;
+      border-top: 1px solid #2e3250;
+      margin: 0;
+    }
+    .profile-dropdown .pd-signout {
+      display: block;
+      padding: 0.65rem 1rem;
+      font-size: 0.85rem;
+      color: #e0e0e0;
+      text-decoration: none;
+    }
+    .profile-dropdown .pd-signout:hover {
+      background: #2e3250;
+      border-radius: 0 0 8px 8px;
+      color: #fff;
+    }
   </style>
 </head>
 <body>
+  <header>
+    <button class="profile-btn" id="profileBtn" onclick="toggleDropdown()" aria-label="Account menu">
+      <span id="profileInitials"></span>
+    </button>
+    <div class="profile-dropdown" id="profileDropdown">
+      <div class="pd-info">
+        <div class="pd-name" id="pdName"></div>
+        <div class="pd-email" id="pdEmail"></div>
+      </div>
+      <hr class="pd-divider" />
+      <a class="pd-signout" href="/auth/logout">Sign out</a>
+    </div>
+  </header>
+
   <h1>QSent &mdash; Sentiment Analysis</h1>
 
   <div class="controls">
@@ -79,11 +168,49 @@
   <script>
     let chartInstance = null;
 
-    // Verify session on load; redirect to login if not authenticated
     (async () => {
       const res = await fetch("/auth/me", { credentials: "include" });
-      if (!res.ok) window.location.href = "/login.html";
+      if (!res.ok) { window.location.href = "/login.html"; return; }
+      const user = await res.json();
+      populateProfile(user);
     })();
+
+    function populateProfile(user) {
+      document.getElementById("pdName").textContent = user.name || "";
+      document.getElementById("pdEmail").textContent = user.email || "";
+
+      const btn = document.getElementById("profileBtn");
+      const initialsEl = document.getElementById("profileInitials");
+
+      initialsEl.textContent = getInitials(user.name || user.email);
+      if (user.picture) {
+        const img = document.createElement("img");
+        img.alt = user.name || "Profile";
+        img.onerror = () => img.remove();
+        img.onload = () => { initialsEl.textContent = ""; };
+        btn.appendChild(img);
+        img.src = "/auth/avatar";
+      }
+    }
+
+    function getInitials(nameOrEmail) {
+      const parts = nameOrEmail.trim().split(/\s+/);
+      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+      const local = nameOrEmail.split("@")[0];
+      return local.slice(0, 1).toUpperCase();
+    }
+
+    function toggleDropdown() {
+      document.getElementById("profileDropdown").classList.toggle("open");
+    }
+
+    document.addEventListener("click", (e) => {
+      const btn = document.getElementById("profileBtn");
+      const dropdown = document.getElementById("profileDropdown");
+      if (!btn.contains(e.target) && !dropdown.contains(e.target)) {
+        dropdown.classList.remove("open");
+      }
+    });
 
     async function runAnalysis() {
       const ticker = document.getElementById("ticker").value.trim().toUpperCase();
