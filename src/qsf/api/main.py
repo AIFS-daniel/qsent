@@ -5,9 +5,10 @@ from dotenv import load_dotenv
 
 load_dotenv()  # Must run before auth is imported so env vars are populated
 
+import httpx  # noqa: E402
 from fastapi import Depends, FastAPI, HTTPException, Query  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
-from fastapi.responses import FileResponse, StreamingResponse  # noqa: E402
+from fastapi.responses import FileResponse, Response, StreamingResponse  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
 from qsf.agents.news_comparison import run_news_comparison, run_news_comparison_stream  # noqa: E402
@@ -74,6 +75,18 @@ def news_comparison_stream(tickers: list[str] = Query(...)):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.get("/auth/avatar")
+async def proxy_avatar(user: dict = Depends(get_current_user)):
+    picture = user.get("picture", "")
+    if not picture:
+        raise HTTPException(status_code=404, detail="No avatar")
+    async with httpx.AsyncClient() as client:
+        r = await client.get(picture, follow_redirects=True, timeout=5)
+    if r.status_code != 200:
+        raise HTTPException(status_code=404, detail="Avatar unavailable")
+    return Response(content=r.content, media_type=r.headers.get("content-type", "image/jpeg"))
 
 
 @app.get("/login.html")

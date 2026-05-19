@@ -182,18 +182,14 @@
       const btn = document.getElementById("profileBtn");
       const initialsEl = document.getElementById("profileInitials");
 
+      initialsEl.textContent = getInitials(user.name || user.email);
       if (user.picture) {
         const img = document.createElement("img");
         img.alt = user.name || "Profile";
-        img.src = user.picture;
-        img.onerror = () => {
-          img.remove();
-          initialsEl.textContent = getInitials(user.name || user.email);
-        };
-        initialsEl.textContent = "";
+        img.onerror = () => img.remove();
+        img.onload = () => { initialsEl.textContent = ""; };
         btn.appendChild(img);
-      } else {
-        initialsEl.textContent = getInitials(user.name || user.email);
+        img.src = "/auth/avatar";
       }
     }
 
