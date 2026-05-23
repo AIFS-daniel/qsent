@@ -68,16 +68,16 @@ You will be given a feature description and a list of behaviors that were implem
 
 1. Write a targeted Playwright script in `/tmp/qa_verify.py` that tests the behavior in the live app
 2. Run it: `.venv/bin/python /tmp/qa_verify.py`
-3. Take a screenshot at the key moment. Save to `docs/qa-screenshots/<session-id>/screenshot_<n>.png` so they can be committed and referenced in the PR. You will be given the session ID.
+3. Take a screenshot at the key moment. Save to `/tmp/qa-screenshots/<session-id>/screenshot_<n>.png`. Screenshots stay local — they are not committed to the repo.
 4. Read each screenshot file and describe what you see — you are a multimodal model and can view images.
-5. Report: pass or fail, with the screenshot description as evidence, and the relative path to each screenshot.
+5. Report: pass or fail, with a one or two sentence description of what the screenshot shows. These descriptions will be included in the PR body.
 
 **Playwright script template:**
 ```python
 from playwright.sync_api import sync_playwright, expect
 import os
 
-screenshot_dir = "docs/qa-screenshots/<session-id>"
+screenshot_dir = "/tmp/qa-screenshots/<session-id>"
 os.makedirs(screenshot_dir, exist_ok=True)
 
 with sync_playwright() as p:

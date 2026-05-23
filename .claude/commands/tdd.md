@@ -188,17 +188,7 @@ If the E2E suite has regressions, surface them to the user before marking comple
 
 Before marking complete, commit any screenshots and open a pull request.
 
-**1. Commit screenshots (if any were taken):**
-
-Check whether `docs/qa-screenshots/<session-id>/` contains any files. If so:
-```bash
-git add docs/qa-screenshots/
-git commit -m "chore: add QA screenshots for <feature description>
-
-Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
-```
-
-**2. Push the branch:**
+**1. Push the branch:**
 ```bash
 git push -u origin <branch>
 ```
@@ -235,11 +225,7 @@ gh pr create --title "<feature description>" --body "$(cat <<'EOF'
 
 | Behavior | Result | Notes |
 |----------|--------|-------|
-| <behavior> | Pass | <screenshot description> |
-
-## Screenshots
-
-![<behavior>](docs/qa-screenshots/<session-id>/screenshot_1.png)
+| <behavior> | Pass / Fail | <one sentence description of what was observed in the screenshot> |
 
 ## Test Plan
 
