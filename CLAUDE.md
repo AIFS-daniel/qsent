@@ -65,6 +65,24 @@ When implementing a feature or fixing a bug, invoke agents in this order:
 
 Always invoke `test-writer` before `code-builder`. Tests come first.
 
+## /tdd Command
+
+`/tdd` runs a strict red-green-refactor TDD cycle, orchestrating `test-writer`, `test-runner`, `code-builder`, and `code-reviewer` in sequence for each behavior.
+
+**Start a new session:**
+```
+/tdd "add a normalize_ticker function to src/qsf/common/utils.py"
+```
+Claude will enumerate the behaviors to implement, confirm the list with you, then loop through each one: write one failing test → confirm it's red → implement minimum code → confirm green → move to next behavior. After all behaviors are green, it runs a refactor pass then a code review.
+
+**Resume an interrupted session:**
+```
+/tdd
+```
+Running `/tdd` with no arguments checks for `.claude/tdd-state.json`. If an in-progress session exists, Claude will offer to resume from exactly where it left off (the specific behavior and phase that was interrupted). Choose fresh to discard the previous session and start over.
+
+**State file:** `.claude/tdd-state.json` — written after every phase transition. Do not edit manually. Delete it to clear a completed or abandoned session.
+
 ## Placeholder Modules (Not Yet Implemented)
 
 - `src/qsf/features/` — Feature engineering
