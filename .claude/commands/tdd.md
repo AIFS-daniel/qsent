@@ -43,7 +43,7 @@ Before planning behaviors, ensure you are on a fresh feature branch:
 
 ## Plan Behaviors
 
-From the feature description in `$ARGUMENTS`, enumerate the distinct observable behaviors to implement. Each behavior must map to exactly one public-interface action and its expected outcome. Aim for 2–6 behaviors — if you think of more, consider whether the feature scope is too large.
+Use the confirmed behavior list from the **Understand the Feature** phase — do not re-derive from `$ARGUMENTS`. Each behavior the user approved maps to one item in the state file.
 
 Write the initial state file to `.claude/tdd-state.json`:
 
@@ -159,6 +159,15 @@ Invoke `test-runner` with:
 - Instruction: run the full suite `.venv/bin/pytest`
 - If any tests fail, return to `code-builder` once. If still failing, surface to the user.
 
+Commit the refactor:
+```
+refactor: <feature description>
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+```
+
+Stage all implementation files modified during the session. Do not push yet.
+
 ## Review Phase
 
 Update state: `status` → `"reviewing"`.
@@ -167,15 +176,26 @@ Invoke `code-reviewer` with:
 - All implementation files and test files modified during the session
 - Instruction: review for correctness, security, consistency, and test quality
 
+If the reviewer flags any **Critical** issues:
+- Return to `code-builder` with the specific findings
+- Re-run `test-runner` to confirm the suite is still green after fixes
+- Re-run `code-reviewer` to confirm the critical issues are resolved
+- Do not proceed to QA until no Critical issues remain
+
 ## QA Phase
 
 Update state: `status` → `"qa"`.
+
+**Check whether any UI files were modified** (look in `implementation_files_modified` for changes to `index.html`, `login.html`, or any `.js`/`.css` files):
+
+- **UI files changed** — invoke `qa` with the full browser testing instruction: start the server, write a Playwright script per behavior, take screenshots, describe them, run the full E2E suite.
+- **No UI files changed** — invoke `qa` with a lighter instruction: start the server if needed, smoke test the relevant API endpoints with `curl` or `httpx`, confirm expected responses. Skip Playwright and screenshots.
 
 Invoke `qa` with:
 - The feature description
 - The list of behaviors implemented (descriptions + test names)
 - The implementation files modified
-- Instruction: start the server if needed, write a targeted Playwright script for each behavior, take screenshots, read and describe them, then run the full E2E suite for regressions
+- Whether UI testing is needed (based on the check above)
 
 If any behavior fails QA:
 - Return to `code-builder` with the failure description and screenshot context
@@ -193,13 +213,12 @@ Before marking complete, commit any screenshots and open a pull request.
 git push -u origin <branch>
 ```
 
-**3. Create the PR** using `gh pr create`. The body must include:
+**2. Create the PR** using `gh pr create`. The body must include:
 
 - **Plan** — the full confirmed understanding from the start of the session: the problem being solved, affected files and modules, the complete behavior list the user approved, and any assumptions or open questions that were resolved
 - **Behaviors implemented** — numbered list, each with its test name
 - **Files changed** — implementation files and test files
-- **QA results** — for each behavior: pass/fail and a one-sentence description of what the screenshot shows. If no UI changes, note that explicitly.
-- **Screenshots** — embed each screenshot using a relative markdown image reference: `![Behavior description](docs/qa-screenshots/<session-id>/screenshot_n.png)`. GitHub renders these from the branch. Omit this section if no screenshots were taken.
+- **QA results** — for each behavior: pass/fail and a one-sentence description of what was observed. If no UI changes were made, describe the API response verified instead.
 - **Test plan checklist** — steps a reviewer can follow to verify the feature manually
 
 Use this format:
