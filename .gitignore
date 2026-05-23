@@ -18,3 +18,6 @@ data/labels/
 
 # OS
 .DS_Store
+
+# Claude Code session state (ephemeral, not for version control)
+.claude/tdd-state.json

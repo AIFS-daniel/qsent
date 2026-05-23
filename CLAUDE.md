@@ -55,6 +55,36 @@ Reddit subreddits: `stocks`, `investing`, `wallstreetbets`, `Superstonk`, `Stock
 - Daily aggregation: average sentiment per day by source
 - Trend: last 7 vs first 7 items, ±0.05 threshold → increasing / decreasing / stable
 
+## Agent Workflow
+
+When implementing a feature or fixing a bug, invoke agents in this order:
+1. `test-writer` — write failing tests that describe the intended behavior (before any implementation)
+2. `code-builder` — implement the code until the tests pass
+3. `test-runner` — verify the full suite is green
+4. `code-reviewer` — review before finalizing or creating a PR
+
+Always invoke `test-writer` before `code-builder`. Tests come first.
+
+The `qa` agent starts the webapp (if not already running) and uses Playwright to verify each behavior in the live browser, including screenshots. It runs after `code-reviewer`. Server start command: `TEST_MODE=true .venv/bin/uvicorn qsf.api.main:app --reload`. Auth bypass: `GET /auth/test-login` (only available when `TEST_MODE=true`).
+
+## /tdd Command
+
+`/tdd` runs a strict red-green-refactor TDD cycle, orchestrating `test-writer`, `test-runner`, `code-builder`, and `code-reviewer` in sequence for each behavior.
+
+**Start a new session:**
+```
+/tdd "add a normalize_ticker function to src/qsf/common/utils.py"
+```
+Claude will enumerate the behaviors to implement, confirm the list with you, then loop through each one: write one failing test → confirm it's red → implement minimum code → confirm green → move to next behavior. After all behaviors are green, it runs a refactor pass then a code review.
+
+**Resume an interrupted session:**
+```
+/tdd
+```
+Running `/tdd` with no arguments checks for `.claude/tdd-state.json`. If an in-progress session exists, Claude will offer to resume from exactly where it left off (the specific behavior and phase that was interrupted). Choose fresh to discard the previous session and start over.
+
+**State file:** `.claude/tdd-state.json` — written after every phase transition. Do not edit manually. Delete it to clear a completed or abandoned session.
+
 ## Placeholder Modules (Not Yet Implemented)
 
 - `src/qsf/features/` — Feature engineering
