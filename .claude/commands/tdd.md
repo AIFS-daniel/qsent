@@ -193,6 +193,7 @@ Update state: `status` → `"qa"`.
 
 Invoke `qa` with:
 - The feature description
+- The session ID (from `session_id` in the state file — used as the screenshot directory name)
 - The list of behaviors implemented (descriptions + test names)
 - The implementation files modified
 - Whether UI testing is needed (based on the check above)
