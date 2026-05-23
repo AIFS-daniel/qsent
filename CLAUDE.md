@@ -55,6 +55,16 @@ Reddit subreddits: `stocks`, `investing`, `wallstreetbets`, `Superstonk`, `Stock
 - Daily aggregation: average sentiment per day by source
 - Trend: last 7 vs first 7 items, ±0.05 threshold → increasing / decreasing / stable
 
+## Agent Workflow
+
+When implementing a feature or fixing a bug, invoke agents in this order:
+1. `test-writer` — write failing tests that describe the intended behavior (before any implementation)
+2. `code-builder` — implement the code until the tests pass
+3. `test-runner` — verify the full suite is green
+4. `code-reviewer` — review before finalizing or creating a PR
+
+Always invoke `test-writer` before `code-builder`. Tests come first.
+
 ## Placeholder Modules (Not Yet Implemented)
 
 - `src/qsf/features/` — Feature engineering
