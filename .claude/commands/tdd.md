@@ -65,7 +65,8 @@ Write the initial state file to `.claude/tdd-state.json`:
   ],
   "current_behavior_index": 0,
   "test_files_modified": [],
-  "implementation_files_modified": []
+  "implementation_files_modified": [],
+  "pr_url": ""
 }
 ```
 
@@ -183,15 +184,84 @@ If any behavior fails QA:
 
 If the E2E suite has regressions, surface them to the user before marking complete.
 
+## Create PR
+
+Before marking complete, commit any screenshots and open a pull request.
+
+**1. Commit screenshots (if any were taken):**
+
+Check whether `docs/qa-screenshots/<session-id>/` contains any files. If so:
+```bash
+git add docs/qa-screenshots/
+git commit -m "chore: add QA screenshots for <feature description>
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
+```
+
+**2. Push the branch:**
+```bash
+git push -u origin <branch>
+```
+
+**3. Create the PR** using `gh pr create`. The body must include:
+
+- **Plan** — the confirmed feature understanding from the start of the session: the goal, affected files, and the behavior list the user approved
+- **Behaviors implemented** — numbered list, each with its test name
+- **Files changed** — implementation files and test files
+- **QA results** — for each behavior: pass/fail and a one-sentence description of what the screenshot shows. If no UI changes, note that explicitly.
+- **Screenshots** — embed each screenshot using a relative markdown image reference: `![Behavior description](docs/qa-screenshots/<session-id>/screenshot_n.png)`. GitHub renders these from the branch. Omit this section if no screenshots were taken.
+- **Test plan checklist** — steps a reviewer can follow to verify the feature manually
+
+Use this format:
+```
+gh pr create --title "<feature description>" --body "$(cat <<'EOF'
+## Plan
+
+<confirmed goal from the Understand the Feature phase>
+
+**Affected files:** <list>
+
+## Behaviors Implemented
+
+1. <behavior> — `<test_name>`
+2. ...
+
+## Files Changed
+
+- `<implementation file>`
+- `<test file>`
+
+## QA Results
+
+| Behavior | Result | Notes |
+|----------|--------|-------|
+| <behavior> | Pass | <screenshot description> |
+
+## Screenshots
+
+![<behavior>](docs/qa-screenshots/<session-id>/screenshot_1.png)
+
+## Test Plan
+
+- [ ] <manual verification step>
+- [ ] Run `.venv/bin/pytest` — all tests pass
+- [ ] Run `.venv/bin/pytest tests/e2e/` — E2E suite passes
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+EOF
+)"
+```
+
+Record the PR URL in the state file under `"pr_url"`.
+
 ## Complete
 
 Update state: `status` → `"complete"`.
 
 Print a summary:
-- Feature implemented
-- Behaviors covered (list each with test name)
-- Files changed (implementation + tests)
-- QA result (behaviors verified, screenshot descriptions, E2E suite result)
+- PR URL
+- Behaviors implemented
+- QA result
 - Any issues flagged by the reviewer
 
 The state file is left in place as a record. The user can delete `.claude/tdd-state.json` manually.
