@@ -195,7 +195,7 @@ git push -u origin <branch>
 
 **3. Create the PR** using `gh pr create`. The body must include:
 
-- **Plan** — the confirmed feature understanding from the start of the session: the goal, affected files, and the behavior list the user approved
+- **Plan** — the full confirmed understanding from the start of the session: the problem being solved, affected files and modules, the complete behavior list the user approved, and any assumptions or open questions that were resolved
 - **Behaviors implemented** — numbered list, each with its test name
 - **Files changed** — implementation files and test files
 - **QA results** — for each behavior: pass/fail and a one-sentence description of what the screenshot shows. If no UI changes, note that explicitly.
@@ -207,9 +207,17 @@ Use this format:
 gh pr create --title "<feature description>" --body "$(cat <<'EOF'
 ## Plan
 
-<confirmed goal from the Understand the Feature phase>
+**Goal:** <one or two sentences describing the problem being solved and why>
 
-**Affected files:** <list>
+**Affected files:**
+- `<file>` — <why it's touched>
+
+**Behaviors agreed with the author:**
+1. <behavior description as confirmed by the user>
+2. ...
+
+**Assumptions / decisions made:**
+- <any open questions that were resolved during the understanding phase, or "None" if there were none>
 
 ## Behaviors Implemented
 
