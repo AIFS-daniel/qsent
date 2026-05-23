@@ -10,7 +10,23 @@ $ARGUMENTS
 
 1. Check whether `.claude/tdd-state.json` exists.
    - If it exists and `status` is not `complete`, read it and ask the user: "Found an in-progress TDD session for: [feature]. Resume, or start fresh?" Wait for their answer before proceeding.
-   - If it does not exist (or user chooses fresh), proceed to **Plan Behaviors**.
+   - If it does not exist (or user chooses fresh), proceed to **Understand the Feature**.
+
+## Understand the Feature
+
+Before writing any code or tests, confirm you understand what needs to be built.
+
+1. Read `$ARGUMENTS` carefully.
+2. Search the codebase for relevant existing code — find the module(s) the feature touches, related tests, and any interfaces or patterns it must follow. Use Glob and Grep to explore.
+3. Write a short summary back to the user covering:
+   - **What you understand the goal to be** — one or two sentences on the problem being solved
+   - **Where the change lives** — which files and modules will be affected
+   - **What you're planning to implement** — a numbered list of the behaviors you intend to build, each as a single sentence (e.g. "normalize_ticker strips leading and trailing whitespace")
+   - **Any assumptions or open questions** — anything ambiguous in the request that could affect the approach
+4. Ask the user: "Does this match what you have in mind, or is there anything to adjust before we start?"
+5. Wait for confirmation. Do not proceed to branch setup or any code until the user confirms.
+
+If the user corrects or adds to your understanding, revise your summary and confirm again before continuing.
 
 ## Branch Setup
 
@@ -36,7 +52,7 @@ Write the initial state file to `.claude/tdd-state.json`:
   "session_id": "<feature-slug>-<YYYYMMDD-HHMM>",
   "feature": "<feature description from $ARGUMENTS>",
   "created_at": "<ISO 8601 timestamp>",
-  "status": "in_progress",
+  "status": "in_progress | refactoring | reviewing | qa | complete",
   "branch": "<feature branch name>",
   "behaviors": [
     {
@@ -150,6 +166,23 @@ Invoke `code-reviewer` with:
 - All implementation files and test files modified during the session
 - Instruction: review for correctness, security, consistency, and test quality
 
+## QA Phase
+
+Update state: `status` → `"qa"`.
+
+Invoke `qa` with:
+- The feature description
+- The list of behaviors implemented (descriptions + test names)
+- The implementation files modified
+- Instruction: start the server if needed, write a targeted Playwright script for each behavior, take screenshots, read and describe them, then run the full E2E suite for regressions
+
+If any behavior fails QA:
+- Return to `code-builder` with the failure description and screenshot context
+- Re-run `test-runner` to confirm tests still pass after the fix
+- Re-run `qa` to verify
+
+If the E2E suite has regressions, surface them to the user before marking complete.
+
 ## Complete
 
 Update state: `status` → `"complete"`.
@@ -158,6 +191,7 @@ Print a summary:
 - Feature implemented
 - Behaviors covered (list each with test name)
 - Files changed (implementation + tests)
+- QA result (behaviors verified, screenshot descriptions, E2E suite result)
 - Any issues flagged by the reviewer
 
 The state file is left in place as a record. The user can delete `.claude/tdd-state.json` manually.

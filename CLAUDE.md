@@ -65,6 +65,8 @@ When implementing a feature or fixing a bug, invoke agents in this order:
 
 Always invoke `test-writer` before `code-builder`. Tests come first.
 
+The `qa` agent starts the webapp (if not already running) and uses Playwright to verify each behavior in the live browser, including screenshots. It runs after `code-reviewer`. Server start command: `TEST_MODE=true .venv/bin/uvicorn qsf.api.main:app --reload`. Auth bypass: `GET /auth/test-login` (only available when `TEST_MODE=true`).
+
 ## /tdd Command
 
 `/tdd` runs a strict red-green-refactor TDD cycle, orchestrating `test-writer`, `test-runner`, `code-builder`, and `code-reviewer` in sequence for each behavior.
