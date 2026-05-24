@@ -4,11 +4,13 @@
 import sys
 import os
 
+import pytest
+
 # scripts/ is not a package and not on the default pytest path, so we insert
 # the project root so that `from scripts.generate_features import ...` resolves.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from scripts.generate_features import humanize_name, extract_test_names  # noqa: E402
+from scripts.generate_features import humanize_name, extract_test_names, feature_area_from_filename  # noqa: E402
 
 
 def test_given_snake_case_test_name_when_humanize_name_called_then_returns_capitalized_sentence():
@@ -37,3 +39,16 @@ def test_given_file_with_mixed_functions_when_extract_test_names_called_then_ret
     names = extract_test_names(test_file)
 
     assert sorted(names) == ["test_alpha", "test_beta_method"]
+
+
+@pytest.mark.parametrize("stem, expected", [
+    ("test_analyze_endpoint", "Sentiment Analysis"),
+    ("test_auth_endpoints", "Authentication"),
+    ("test_news_comparison_endpoint", "News Comparison"),
+    ("test_workflow", "Analysis Pipeline"),
+    ("test_app_flow", "App Experience"),
+    ("test_login_page", "Login"),
+    ("test_some_new_thing", "Some New Thing"),
+])
+def test_given_filename_stem_when_feature_area_from_filename_called_then_returns_readable_area_name(stem, expected):
+    assert feature_area_from_filename(stem) == expected
