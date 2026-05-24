@@ -36,6 +36,22 @@ def humanize_name(test_name: str) -> str:
     return sentence.capitalize()
 
 
+def render_features_markdown(features: OrderedDict[str, list[str]]) -> str:
+    lines = [
+        "# QSent Features",
+        "",
+        "> Auto-generated from the integration and e2e test suite. Each section reflects a product feature area; each item is a verified behavior.",
+    ]
+    for area, behaviors in features.items():
+        lines.append("")
+        lines.append(f"## {area}")
+        lines.append("")
+        for behavior in behaviors:
+            lines.append(f"- {behavior}")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def collect_features(tests_dir: Path) -> OrderedDict[str, list[str]]:
     result: OrderedDict[str, list[str]] = OrderedDict()
     subdirs = sorted(

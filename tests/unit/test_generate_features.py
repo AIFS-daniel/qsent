@@ -10,7 +10,9 @@ import pytest
 # the project root so that `from scripts.generate_features import ...` resolves.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from scripts.generate_features import humanize_name, extract_test_names, feature_area_from_filename, collect_features  # noqa: E402
+from collections import OrderedDict
+
+from scripts.generate_features import humanize_name, extract_test_names, feature_area_from_filename, collect_features, render_features_markdown  # noqa: E402
 
 
 def test_given_snake_case_test_name_when_humanize_name_called_then_returns_capitalized_sentence():
@@ -77,3 +79,22 @@ def test_given_integration_and_e2e_test_files_when_collect_features_called_then_
     assert len(result) == 2
     assert "Login" in result
     assert "Google button" in result["Login"]
+
+
+def test_given_ordered_dict_with_two_feature_areas_when_render_features_markdown_called_then_produces_valid_markdown():
+    features = OrderedDict([
+        ("Authentication", ["Log in with Google", "Reject expired token"]),
+        ("Analysis Pipeline", ["Fetch market data", "Score sentiment"]),
+    ])
+
+    output = render_features_markdown(features)
+
+    assert output.startswith("# QSent Features")
+    assert "## Authentication\n" in output
+    assert "## Analysis Pipeline\n" in output
+    assert "- Log in with Google\n" in output
+    assert "- Reject expired token\n" in output
+    assert "- Fetch market data\n" in output
+    assert "- Score sentiment\n" in output
+    # Determinism: calling twice with the same input must return identical output
+    assert render_features_markdown(features) == output
