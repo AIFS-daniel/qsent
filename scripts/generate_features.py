@@ -68,3 +68,30 @@ def collect_features(tests_dir: Path) -> OrderedDict[str, list[str]]:
         key = feature_area_from_filename(file_path.stem)
         result[key] = [humanize_name(n) for n in names]
     return result
+
+
+def check_docs(docs_path: Path, generated: str) -> bool:
+    if not docs_path.exists():
+        return False
+    return docs_path.read_text() == generated
+
+
+if __name__ == "__main__":
+    import sys
+
+    repo_root = Path(__file__).parent.parent
+    features = collect_features(repo_root / "tests")
+    generated = render_features_markdown(features)
+    docs_path = repo_root / "docs" / "FEATURES.md"
+
+    if "--check" in sys.argv:
+        if check_docs(docs_path, generated):
+            print("docs/FEATURES.md is up to date.")
+            sys.exit(0)
+        else:
+            print("docs/FEATURES.md is missing or out of date. Run: python scripts/generate_features.py")
+            sys.exit(1)
+    else:
+        docs_path.write_text(generated)
+        print("docs/FEATURES.md written.")
+        sys.exit(0)

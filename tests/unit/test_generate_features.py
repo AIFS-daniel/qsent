@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from collections import OrderedDict
 
-from scripts.generate_features import humanize_name, extract_test_names, feature_area_from_filename, collect_features, render_features_markdown  # noqa: E402
+from scripts.generate_features import humanize_name, extract_test_names, feature_area_from_filename, collect_features, render_features_markdown, check_docs  # noqa: E402
 
 
 def test_given_snake_case_test_name_when_humanize_name_called_then_returns_capitalized_sentence():
@@ -98,3 +98,21 @@ def test_given_ordered_dict_with_two_feature_areas_when_render_features_markdown
     assert "- Score sentiment\n" in output
     # Determinism: calling twice with the same input must return identical output
     assert render_features_markdown(features) == output
+
+
+def test_check_docs_should_return_correct_result_for_missing_matching_and_differing_content(tmp_path):
+    # Pre-implementation — expected to fail with ImportError until code-builder
+    # adds check_docs to scripts/generate_features.py.
+    docs_file = tmp_path / "FEATURES.md"
+    generated = "# QSent Features\n\n## Auth\n\n- Log in\n"
+
+    # Case 1: file does not exist
+    assert check_docs(docs_file, generated) is False
+
+    # Case 2: file exists and contents match exactly
+    docs_file.write_text(generated)
+    assert check_docs(docs_file, generated) is True
+
+    # Case 3: file exists but contents differ
+    docs_file.write_text(generated + "\nextra line\n")
+    assert check_docs(docs_file, generated) is False
