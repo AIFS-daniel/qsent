@@ -22,18 +22,15 @@ _FEATURE_AREA_MAP = {
 }
 
 
-def feature_area_from_filename(filename: str) -> str:
-    stem = Path(filename).stem
+def feature_area_from_filename(stem: str) -> str:
+    stem = Path(stem).stem
     if stem in _FEATURE_AREA_MAP:
         return _FEATURE_AREA_MAP[stem]
-    without_prefix = stem.removeprefix("test_")
-    return without_prefix.replace("_", " ").title()
+    return stem.removeprefix("test_").replace("_", " ").title()
 
 
 def humanize_name(test_name: str) -> str:
-    without_prefix = test_name.removeprefix("test_")
-    sentence = without_prefix.replace("_", " ")
-    return sentence.capitalize()
+    return test_name.removeprefix("test_").replace("_", " ").capitalize()
 
 
 def render_features_markdown(features: OrderedDict[str, list[str]]) -> str:
@@ -54,19 +51,20 @@ def render_features_markdown(features: OrderedDict[str, list[str]]) -> str:
 
 def collect_features(tests_dir: Path) -> OrderedDict[str, list[str]]:
     result: OrderedDict[str, list[str]] = OrderedDict()
-    subdirs = sorted(
-        [tests_dir / "integration", tests_dir / "e2e"],
-        key=lambda p: p.name,
-    )
+    candidate_dirs = [tests_dir / "e2e", tests_dir / "integration"]
     files = sorted(
-        f for subdir in subdirs for f in subdir.glob("test_*.py") if subdir.exists()
+        f
+        for subdir in candidate_dirs
+        if subdir.exists()
+        for f in subdir.glob("test_*.py")
     )
     for file_path in files:
         names = extract_test_names(file_path)
         if not names:
             continue
-        key = feature_area_from_filename(file_path.stem)
-        result[key] = [humanize_name(n) for n in names]
+        result[feature_area_from_filename(file_path.stem)] = [
+            humanize_name(n) for n in names
+        ]
     return result
 
 
