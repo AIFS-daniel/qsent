@@ -159,6 +159,12 @@ Invoke `test-runner` with:
 - Instruction: run the full suite `.venv/bin/pytest`
 - If any tests fail, return to `code-builder` once. If still failing, surface to the user.
 
+Regenerate living feature docs (test names are stable after refactor):
+``` 
+python scripts/generate_features.py
+```
+If `docs/FEATURES.md` was written or changed, stage it alongside the implementation files.
+
 Commit the refactor:
 ```
 refactor: <feature description>
@@ -166,7 +172,7 @@ refactor: <feature description>
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 ```
 
-Stage all implementation files modified during the session. Do not push yet.
+Stage all implementation files modified during the session plus docs/FEATURES.md if it changed. Do not push yet.
 
 ## Review Phase
 
