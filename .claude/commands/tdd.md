@@ -165,6 +165,19 @@ python scripts/generate_features.py
 ```
 If `docs/FEATURES.md` was written or changed, stage it alongside the implementation files.
 
+Update `CLAUDE.md` if the implementation changed anything it documents. Check `implementation_files_modified` against the current `CLAUDE.md` content and update only the sections that are now stale or incomplete. Sections to check:
+
+- **Key source files** — if a new module or file was added to `src/qsf/`, add it with a one-line description
+- **API Endpoints** — if a new endpoint was added or an existing one changed its contract, update the list
+- **Provider Pattern** — if a new provider protocol or concrete implementation was added, reflect it
+- **Pipeline flow** — if the LangGraph graph structure changed (new node, reordered edges), update the flow description
+- **Placeholder Modules** — if a placeholder was implemented (moved from placeholder to real), remove it from that section
+- **Data Sources table** — if a new external data source was introduced, add a row
+
+Do not rewrite sections unaffected by this session. Do not change the Agent Workflow, /tdd Command, or Architecture Decision Records sections. If nothing in `CLAUDE.md` is stale after this session, skip this step entirely.
+
+If `CLAUDE.md` was changed, stage it alongside the implementation files.
+
 Commit the refactor:
 ```
 refactor: <feature description>
