@@ -1,18 +1,15 @@
-# Written pre-implementation. Tests are expected to fail with ImportError
-# until code-builder creates scripts/generate_features.py.
-
-import sys
-import os
+from collections import OrderedDict
 
 import pytest
 
-# scripts/ is not a package and not on the default pytest path, so we insert
-# the project root so that `from scripts.generate_features import ...` resolves.
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
-
-from collections import OrderedDict
-
-from scripts.generate_features import humanize_name, extract_test_names, feature_area_from_filename, collect_features, render_features_markdown, check_docs  # noqa: E402
+from scripts.generate_features import (
+    check_docs,
+    collect_features,
+    extract_test_names,
+    feature_area_from_filename,
+    humanize_name,
+    render_features_markdown,
+)
 
 
 def test_given_snake_case_test_name_when_humanize_name_called_then_returns_capitalized_sentence():

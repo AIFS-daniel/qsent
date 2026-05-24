@@ -30,7 +30,8 @@ def feature_area_from_filename(stem: str) -> str:
 
 
 def humanize_name(test_name: str) -> str:
-    return test_name.removeprefix("test_").replace("_", " ").capitalize()
+    s = test_name.removeprefix("test_").replace("_", " ")
+    return s[0].upper() + s[1:] if s else s
 
 
 def render_features_markdown(features: OrderedDict[str, list[str]]) -> str:
@@ -62,16 +63,15 @@ def collect_features(tests_dir: Path) -> OrderedDict[str, list[str]]:
         names = extract_test_names(file_path)
         if not names:
             continue
-        result[feature_area_from_filename(file_path.stem)] = [
-            humanize_name(n) for n in names
-        ]
+        area = feature_area_from_filename(file_path.stem)
+        result.setdefault(area, []).extend(humanize_name(n) for n in names)
     return result
 
 
 def check_docs(docs_path: Path, generated: str) -> bool:
     if not docs_path.exists():
         return False
-    return docs_path.read_text() == generated
+    return docs_path.read_text().replace("\r\n", "\n") == generated
 
 
 if __name__ == "__main__":
