@@ -149,41 +149,66 @@ The forecasting module (`src/qsf/forecasting/`) takes historical market data com
 
 The best model is selected by Sharpe ratio. Results include accuracy, Sharpe, max drawdown, and total return from a simulated trading strategy.
 
-**How it connects to the sentiment pipeline:** The `/analyze` endpoint already outputs `news_sentiment` and `social_sentiment` per day — exactly what the forecasting pipeline expects. The forecasting pipeline fetches its own 2-year market data window via yfinance and uses sentiment as an overlay on top of technical indicators (RSI, volatility, moving averages, momentum).
+**How it connects to the sentiment pipeline:** Forecasting is wired into the same LangGraph pipeline as an opt-in node that runs after `aggregate`. The `aggregate` node now also emits a `sentiment_daily` frame (`news_sentiment` and `social_sentiment` per day); the forecast node fetches a 2-year market window through the same injected market provider and uses that sentiment as an overlay on top of technical indicators (RSI, volatility, moving averages, momentum). Because the sentiment window is much shorter than the market window, the overlay is reindexed onto the full history with a neutral (0) fill so non-overlapping days aren't dropped.
 
-### Wiring it into the API
+### How it's wired
 
-The existing `/analyze` output already contains everything the forecasting pipeline needs. The connection looks like this:
+`/analyze` stops at the `aggregate` node. `/forecast` invokes the *same* graph with `forecast_enabled=True`, which routes through one extra `forecast` node:
+
+```
+fetch_market_data → ... → aggregate ─┬─→ END                (/analyze)
+                                     └─→ forecast → END      (/forecast, forecast_enabled=True)
+```
+
+The forecast node has no data-fetching logic of its own beyond the market provider — when ingestion moves to Supabase, swapping `MarketDataProvider` is the only change required.
 
 ```python
+# ForecastingPipeline receives history from the caller (provider), not yfinance:
 from qsf.forecasting.pipeline import ForecastingPipeline
-import pandas as pd
 
-# Convert daily_data from /analyze output into a DataFrame
-sentiment_daily = pd.DataFrame([
-    {
-        "date": pd.to_datetime(item["date"]),
-        "news_sentiment": item["news_sentiment"],
-        "social_sentiment": item["social_sentiment"],
-    }
-    for item in result["daily_data"]
-]).set_index("date")
-
-# Run the forecasting pipeline
-forecaster = ForecastingPipeline(ticker="IONQ", period="2y")
-forecast = forecaster.run(sentiment_daily=sentiment_daily)
-
+forecaster = ForecastingPipeline(ticker="IONQ")
+forecast = forecaster.run(hist, sentiment_daily=sentiment_daily)
 # forecast["best_model"] contains direction prediction, Sharpe, drawdown, total return
 ```
 
-### What needs to change
+Call it via the API:
 
-- **New `/forecast` endpoint** — separate from `/analyze` since it trains multiple models and is significantly slower
-- **Async or caching** — the forecasting pipeline can take 10–30 seconds; it should run async or cache results by ticker
-- **UI additions** — a new section on the frontend to display predicted direction, model confidence, Sharpe ratio, and max drawdown
+```bash
+curl -X POST http://127.0.0.1:8000/forecast \
+  -H "Content-Type: application/json" \
+  -d '{"ticker": "IONQ"}'
+```
+
+**Caching:** because the node trains several models (10–30s), `/forecast` caches results per ticker in-process for 10 minutes (`FORECAST_CACHE_TTL_S` in `src/qsf/api/main.py`).
+
+### Next-day direction call
+
+Beyond backtest metrics, `/forecast` returns a forward prediction under `next_day`. The best model is refit on all labelled rows (train+val+test) and applied to the most recent engineered feature row — the one `create_targets` drops because its forward return isn't realised yet — yielding the call for the upcoming session:
+
+```json
+"next_day": {
+  "as_of": "2026-06-05",
+  "target_date": "2026-06-08",
+  "horizon": "next_trading_day",
+  "model": "RandomForest",
+  "direction": "up",
+  "confidence": 0.62,            // populated when the best model is a classifier
+  "predicted_return_pct": null   // populated instead when it's a regressor
+}
+```
+
+This is a model estimate from a research pipeline, not financial advice.
+
+### Frontend
+
+The dashboard has a **Forecast** button next to **Analyze**. It calls `POST /forecast` and renders a **next-day direction banner** (up/down, model, confidence or predicted return), a summary of the best model (directional accuracy, Sharpe, total return, max drawdown), and a per-model comparison table. Because training takes 10–30s, the button shows a progress message and is disabled while the request is in flight.
+
+### Still open
+
 - **XGBoost** — optional but improves results; requires `pip install -e ".[forecasting-extra]"`
+- **Sentiment coverage** — the overlay still only spans ~30 days of a 2-year window, so most training rows carry neutral sentiment; worth revisiting once a longer sentiment history is stored
 
-**Current status:** The module is implemented but not yet wired into the API. A `/forecast` endpoint is the planned next step.
+**Current status:** The forecasting node is wired into the pipeline, exposed at `POST /forecast`, and surfaced in the dashboard.
 
 ---
 

@@ -60,6 +60,97 @@
     }
     .meta span b { color: #fff; }
 
+    button.secondary { background: #2e3250; }
+    button.secondary:hover:not(:disabled) { background: #3a3f63; }
+
+    .forecast-wrapper {
+      width: 100%;
+      max-width: 960px;
+      background: #1c1f2e;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-top: 1.5rem;
+    }
+    .forecast-wrapper h2 {
+      font-size: 1rem;
+      color: #fff;
+      margin-bottom: 0.35rem;
+      letter-spacing: 0.03em;
+    }
+    .forecast-caption {
+      font-size: 0.78rem;
+      color: #888;
+      margin-bottom: 1.25rem;
+    }
+    .forecast-hero {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+      background: #0f1117;
+      border: 1px solid #2e3250;
+      border-left-width: 4px;
+      border-radius: 10px;
+      padding: 1.1rem 1.4rem;
+      margin-bottom: 1.5rem;
+    }
+    .forecast-hero.up { border-left-color: #4ecb71; }
+    .forecast-hero.down { border-left-color: #f76e6e; }
+    .fh-arrow { font-size: 2rem; line-height: 1; }
+    .fh-up { color: #4ecb71; }
+    .fh-down { color: #f76e6e; }
+    .fh-main { display: flex; flex-direction: column; gap: 0.25rem; }
+    .fh-dir { font-size: 1.3rem; font-weight: 700; letter-spacing: 0.03em; }
+    .fh-dir .fh-note { color: #888; font-weight: 400; font-size: 0.85rem; }
+    .fh-sub { font-size: 0.78rem; color: #888; }
+    .fh-metric { margin-left: auto; text-align: right; }
+    .fh-metric-val { font-size: 1.3rem; font-weight: 600; color: #fff; }
+    .fh-metric-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #888;
+    }
+
+    .forecast-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .fcard {
+      background: #0f1117;
+      border: 1px solid #2e3250;
+      border-radius: 8px;
+      padding: 1rem;
+    }
+    .fcard.best { border-color: #4f6ef7; }
+    .fcard .fc-label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #888;
+      margin-bottom: 0.45rem;
+    }
+    .fcard .fc-value { font-size: 1.25rem; font-weight: 600; color: #fff; }
+    .fc-pos { color: #4ecb71; }
+    .fc-neg { color: #f76e6e; }
+
+    .forecast-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .forecast-table th, .forecast-table td {
+      text-align: right;
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid #2e3250;
+    }
+    .forecast-table th:first-child, .forecast-table td:first-child { text-align: left; }
+    .forecast-table th { color: #888; font-weight: 600; }
+    .forecast-table td { color: #ccc; }
+    .forecast-table tr.is-best td { color: #fff; background: rgba(79,110,247,0.08); }
+    .forecast-table .row-badge {
+      font-size: 0.68rem;
+      color: #4f6ef7;
+      margin-left: 0.4rem;
+    }
+
     header {
       position: relative;
       width: 100%;
@@ -156,6 +247,7 @@
   <div class="controls">
     <input id="ticker" type="text" placeholder="AAPL" value="IONQ" />
     <button id="analyzeBtn" onclick="runAnalysis()">Analyze</button>
+    <button id="forecastBtn" class="secondary" onclick="runForecast()">Forecast</button>
   </div>
 
   <div id="status"></div>
@@ -163,6 +255,26 @@
   <div class="chart-wrapper" id="chartSection" style="display:none">
     <div class="meta" id="meta"></div>
     <canvas id="chart"></canvas>
+  </div>
+
+  <div class="forecast-wrapper" id="forecastSection" style="display:none">
+    <h2>Price Movement Forecast</h2>
+    <div class="forecast-caption" id="forecastCaption"></div>
+    <div class="forecast-hero" id="forecastHero" style="display:none"></div>
+    <div class="forecast-cards" id="forecastCards"></div>
+    <table class="forecast-table">
+      <thead>
+        <tr>
+          <th>Model</th>
+          <th>Type</th>
+          <th>Directional Acc.</th>
+          <th>Sharpe</th>
+          <th>Total Return</th>
+          <th>Max Drawdown</th>
+        </tr>
+      </thead>
+      <tbody id="forecastRows"></tbody>
+    </table>
   </div>
 
   <script>
@@ -217,9 +329,11 @@
       if (!ticker) return;
 
       const btn = document.getElementById("analyzeBtn");
+      const forecastBtn = document.getElementById("forecastBtn");
       const status = document.getElementById("status");
 
       btn.disabled = true;
+      forecastBtn.disabled = true;
       status.textContent = `Fetching data for ${ticker}...`;
       document.getElementById("chartSection").style.display = "none";
 
@@ -248,7 +362,140 @@
         status.textContent = `Failed to connect to API: ${e.message}`;
       } finally {
         btn.disabled = false;
+        forecastBtn.disabled = false;
       }
+    }
+
+    async function runForecast() {
+      const ticker = document.getElementById("ticker").value.trim().toUpperCase();
+      if (!ticker) return;
+
+      const analyzeBtn = document.getElementById("analyzeBtn");
+      const forecastBtn = document.getElementById("forecastBtn");
+      const status = document.getElementById("status");
+
+      analyzeBtn.disabled = true;
+      forecastBtn.disabled = true;
+      status.textContent = `Training forecast models for ${ticker}… (this can take 10–30s)`;
+      document.getElementById("forecastSection").style.display = "none";
+
+      try {
+        const res = await fetch("/forecast", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ticker }),
+          credentials: "include",
+        });
+
+        if (!res.ok) {
+          if (res.status === 401) {
+            window.location.href = "/login.html";
+            return;
+          }
+          const err = await res.json();
+          status.textContent = `Error: ${err.detail || res.statusText}`;
+          return;
+        }
+
+        const data = await res.json();
+        renderForecast(data);
+        status.textContent = "";
+      } catch (e) {
+        status.textContent = `Failed to connect to API: ${e.message}`;
+      } finally {
+        analyzeBtn.disabled = false;
+        forecastBtn.disabled = false;
+      }
+    }
+
+    function fmtPct(v) {
+      if (v === null || v === undefined) return "—";
+      return `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
+    }
+    function fmtAcc(v) {
+      if (v === null || v === undefined) return "—";
+      return `${(v * 100).toFixed(1)}%`;
+    }
+    function fmtNum(v) {
+      if (v === null || v === undefined) return "—";
+      return v.toFixed(2);
+    }
+    function signClass(v) {
+      if (v === null || v === undefined) return "";
+      return v >= 0 ? "fc-pos" : "fc-neg";
+    }
+
+    function renderForecast(data) {
+      const best = data.best_model || {};
+      const models = data.models || [];
+
+      const updated = data.last_updated ? data.last_updated.slice(0, 10) : "—";
+      document.getElementById("forecastCaption").textContent =
+        `${data.ticker} · test-set backtest over ${data.test_samples ?? "—"} days ` +
+        `· ${data.n_features ?? "—"} features · updated ${updated}`;
+
+      // Next-day direction call (hero banner)
+      const nd = data.next_day;
+      const hero = document.getElementById("forecastHero");
+      if (nd && nd.direction) {
+        const up = nd.direction === "up";
+        const dirCls = up ? "fh-up" : "fh-down";
+        let metricLabel = "", metricVal = "", metricCls = "";
+        if (nd.confidence !== null && nd.confidence !== undefined) {
+          metricLabel = "Confidence";
+          metricVal = fmtAcc(nd.confidence);
+        } else if (nd.predicted_return_pct !== null && nd.predicted_return_pct !== undefined) {
+          metricLabel = "Predicted Return";
+          metricVal = fmtPct(nd.predicted_return_pct);
+          metricCls = signClass(nd.predicted_return_pct);
+        }
+        hero.className = `forecast-hero ${up ? "up" : "down"}`;
+        hero.innerHTML = `
+          <div class="fh-arrow ${dirCls}">${up ? "▲" : "▼"}</div>
+          <div class="fh-main">
+            <div class="fh-dir ${dirCls}">${up ? "UP" : "DOWN"} <span class="fh-note">next trading day</span></div>
+            <div class="fh-sub">For ${nd.target_date ?? "—"} · ${nd.model ?? "—"} · as of ${nd.as_of ?? "—"} · model estimate, not advice</div>
+          </div>
+          ${metricVal ? `<div class="fh-metric"><div class="fh-metric-val ${metricCls}">${metricVal}</div><div class="fh-metric-label">${metricLabel}</div></div>` : ""}
+        `;
+        hero.style.display = "flex";
+      } else {
+        hero.style.display = "none";
+      }
+
+      const cards = [
+        { label: "Best Model", value: best.name ?? "—", cls: "" },
+        { label: "Directional Acc.", value: fmtAcc(best.directional_accuracy), cls: "" },
+        { label: "Sharpe", value: fmtNum(best.sharpe), cls: signClass(best.sharpe) },
+        { label: "Total Return", value: fmtPct(best.total_return_pct), cls: signClass(best.total_return_pct) },
+        { label: "Max Drawdown", value: fmtPct(best.max_drawdown_pct), cls: signClass(best.max_drawdown_pct) },
+      ];
+      document.getElementById("forecastCards").innerHTML = cards.map((c, i) => `
+        <div class="fcard${i === 0 ? " best" : ""}">
+          <div class="fc-label">${c.label}</div>
+          <div class="fc-value ${c.cls}">${c.value}</div>
+        </div>
+      `).join("");
+
+      document.getElementById("forecastRows").innerHTML = models.map(m => {
+        const isBest = m.name === best.name;
+        const dirAcc = m.metrics?.directional_accuracy;
+        const sharpe = m.trading?.sharpe;
+        const totRet = m.trading?.total_return_pct;
+        const maxDD = m.trading?.max_drawdown_pct;
+        return `
+          <tr class="${isBest ? "is-best" : ""}">
+            <td>${m.name}${isBest ? '<span class="row-badge">best</span>' : ""}</td>
+            <td>${m.type ?? "—"}</td>
+            <td>${fmtAcc(dirAcc)}</td>
+            <td class="${signClass(sharpe)}">${fmtNum(sharpe)}</td>
+            <td class="${signClass(totRet)}">${fmtPct(totRet)}</td>
+            <td class="${signClass(maxDD)}">${fmtPct(maxDD)}</td>
+          </tr>
+        `;
+      }).join("");
+
+      document.getElementById("forecastSection").style.display = "block";
     }
 
     function renderChart(data) {

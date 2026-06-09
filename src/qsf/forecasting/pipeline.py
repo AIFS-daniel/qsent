@@ -10,7 +10,6 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-import yfinance as yf
 
 from qsf.features.engineering import engineer_features
 from qsf.features.targets import create_targets
@@ -86,6 +85,61 @@ def _compute_trading_metrics(
     }
 
 
+def _predict_next_day(
+    best_model: Any,
+    model_type: str,
+    ticker: str,
+    df_features: pd.DataFrame,
+    feature_cols: list[str],
+    scaler: Any,
+    X_all: np.ndarray,
+    y_all_dir: np.ndarray,
+    y_all_return: np.ndarray,
+) -> dict[str, Any] | None:
+    """Forecast the direction of the next trading day.
+
+    The most recent engineered row has no realised forward return yet (it is
+    exactly the row ``create_targets`` drops), so its features are what we feed
+    the model to predict the upcoming session. The best model is refit on all
+    labelled rows first so the live call benefits from the full history, then
+    the live row is scaled with the same (leak-free) scaler used for backtest.
+    """
+    try:
+        live = df_features.iloc[[-1]][feature_cols].fillna(0.0)
+        X_live = scaler.transform(live.values)
+        as_of = df_features.index[-1]
+        target_date = (as_of + pd.tseries.offsets.BDay(1)).date()
+
+        out: dict[str, Any] = {
+            "as_of": str(as_of.date()),
+            "target_date": str(target_date),
+            "horizon": "next_trading_day",
+            "model": getattr(best_model, "name", "?"),
+            "confidence": None,
+            "predicted_return_pct": None,
+        }
+
+        if model_type == "classifier":
+            best_model.fit(X_all, y_all_dir)
+            pred = int(best_model.predict(X_live)[0])
+            out["direction"] = "up" if pred == 1 else "down"
+            try:
+                proba = best_model.predict_proba(X_live)[0]
+                out["confidence"] = float(np.max(proba))
+            except Exception:  # model may not expose probabilities
+                pass
+        else:
+            best_model.fit(X_all, y_all_return)
+            predicted_return = float(best_model.predict(X_live)[0])
+            out["direction"] = "up" if predicted_return > 0 else "down"
+            out["predicted_return_pct"] = predicted_return * 100.0
+
+        return out
+    except Exception as exc:  # never let a live-prediction failure sink the run
+        logger.warning("[%s] next-day prediction failed: %s", ticker, exc)
+        return None
+
+
 class ForecastingPipeline:
     """Orchestrates feature engineering, model training, and evaluation."""
 
@@ -101,12 +155,18 @@ class ForecastingPipeline:
 
     def run(
         self,
+        hist: pd.DataFrame,
         sentiment_daily: pd.DataFrame | None = None,
     ) -> dict[str, Any]:
         """Execute the full forecasting pipeline.
 
         Parameters
         ----------
+        hist : pd.DataFrame
+            Historical OHLCV market data with a DatetimeIndex and at minimum
+            'Close' and 'Volume' columns. The caller fetches this through the
+            injected market provider (yfinance today, Supabase later), so this
+            method stays agnostic to where the data comes from.
         sentiment_daily : pd.DataFrame, optional
             Daily sentiment scores from the QSent sentiment pipeline.
             Expected columns: news_sentiment, social_sentiment.
@@ -116,12 +176,20 @@ class ForecastingPipeline:
         dict
             Pipeline results including model comparisons and best forecast.
         """
-        # 1. Fetch market data
-        logger.info("[%s] Fetching market data (%s)", self.ticker, self.period)
-        hist = yf.Ticker(self.ticker).history(period=self.period)
-        if hist.empty:
+        # 1. Validate market data (fetched by the caller via the market provider)
+        if hist is None or hist.empty:
             return {"error": f"No market data for {self.ticker}"}
-        hist.index = hist.index.tz_localize(None)
+        hist = hist.copy()
+        if getattr(hist.index, "tz", None) is not None:
+            hist.index = hist.index.tz_localize(None)
+
+        # The sentiment overlay only covers a recent slice of the (much longer)
+        # market window. Reindex it onto the full history with a neutral 0 fill
+        # so rows outside the sentiment window aren't dropped for missing
+        # features downstream — "no sentiment" is treated as neutral, matching
+        # how the sentiment aggregation already fills gaps.
+        if sentiment_daily is not None and not sentiment_daily.empty:
+            sentiment_daily = sentiment_daily.reindex(hist.index).fillna(0.0)
 
         # 2. Feature engineering
         logger.info("[%s] Engineering features", self.ticker)
@@ -185,6 +253,7 @@ class ForecastingPipeline:
                 "type": "classifier",
                 "metrics": metrics,
                 "trading": trading,
+                "model": model,
             })
 
         for model in regressors:
@@ -199,10 +268,26 @@ class ForecastingPipeline:
                 "type": "regressor",
                 "metrics": metrics,
                 "trading": trading,
+                "model": model,
             })
 
         # 6. Select best model by Sharpe ratio
         best = max(model_results, key=lambda r: r["trading"]["sharpe"])
+
+        # 7. Forecast the next trading day with the best model, refit on all
+        #    labelled data (train+val+test) so the live call uses full history.
+        X_all = np.vstack([X_train, X_val, X_test])
+        y_all_dir = np.concatenate([y_train_dir, y_val_dir, y_test_dir])
+        y_all_return = np.concatenate([y_train, y_val, y_test])
+        next_day = _predict_next_day(
+            best["model"], best["type"], self.ticker,
+            df_features, feature_cols, bundle["scaler"],
+            X_all, y_all_dir, y_all_return,
+        )
+
+        # Model instances are not JSON-serialisable — drop them from the output.
+        for r in model_results:
+            r.pop("model", None)
 
         return {
             "ticker": self.ticker,
@@ -222,4 +307,5 @@ class ForecastingPipeline:
                 "total_return_pct": best["trading"]["total_return_pct"],
                 "max_drawdown_pct": best["trading"]["max_drawdown_pct"],
             },
+            "next_day": next_day,
         }

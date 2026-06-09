@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 QSent is a sentiment analysis pipeline for **quantum computing stocks**. It combines market data (Yahoo Finance), news sentiment (NewsAPI), and social sentiment (Reddit) into a unified daily score, exposed via a FastAPI REST API and a browser frontend.
 
-The longer-term vision is a full AI forecasting system with backtesting. A `ForecastingPipeline` is partially implemented in `src/qsf/forecasting/` but not yet wired into the API.
+The longer-term vision is a full AI forecasting system with backtesting. The `ForecastingPipeline` in `src/qsf/forecasting/` is wired into the LangGraph pipeline as an opt-in `forecast` node and exposed at `POST /forecast`.
 
 ## Commands
 
@@ -45,6 +45,8 @@ No lint or formatter is configured yet. There is no `Makefile` with useful targe
 **Pipeline flow (LangGraph, sequential):**
 `fetch_market_data` → `fetch_news` → `fetch_reddit` → `score_sentiment` → `aggregate`
 
+A conditional edge after `aggregate` routes to an opt-in `forecast` node when `state["forecast_enabled"]` is set (otherwise straight to `END`). `/analyze` leaves the flag off; `/forecast` sets it true. The `forecast` node fetches its own 2-year window via the injected `market` provider, consumes the `sentiment_daily` frame that `aggregate` stashes in state, and lazily imports `ForecastingPipeline` so the sentiment-only path never pays the sklearn import cost.
+
 Each node returns a partial `PipelineState` dict. If any node sets `state["error"]`, all downstream nodes skip execution by checking `state.get("error")` at entry.
 
 **Key source files:**
@@ -60,7 +62,7 @@ Each node returns a partial `PipelineState` dict. If any node sets `state["error
 - `src/qsf/ingestion/social.py` — `RedditProvider`
 - `src/qsf/nlp/sentiment.py` — `FinBERTModel` (HuggingFace Inference API)
 
-**Frontend:** `index.html` and `login.html` are served directly by FastAPI. Chart.js from CDN — no build step.
+**Frontend:** `index.html` and `login.html` are served directly by FastAPI. Chart.js from CDN — no build step. `index.html` has an **Analyze** button (`/analyze` → sentiment chart) and a **Forecast** button (`/forecast` → `renderForecast()` best-model cards + per-model table).
 
 ## Provider Pattern (Critical for Testing)
 
@@ -93,6 +95,7 @@ Provider item dict shapes:
 
 - `GET /health` — unauthenticated health check
 - `POST /analyze` — main endpoint; input `{"ticker": "IONQ"}`; returns sentiment score, breakdown, trend, daily data series
+- `POST /forecast` — runs the forecasting node (input `{"ticker": "IONQ"}`); trains models and returns `best_model` + per-model metrics + a `next_day` forward direction call (best model refit on all data, applied to the latest feature row — the one `create_targets` drops). Slow (10–30s); results cached per ticker in-process for 10 min (`FORECAST_CACHE_TTL_S`)
 - `POST /diagnostics/news-comparison` — compare news across multiple tickers
 - `GET /diagnostics/news-comparison/stream` — SSE streaming version of the above
 
@@ -182,8 +185,7 @@ Reddit subreddits: `stocks`, `investing`, `wallstreetbets`, `Superstonk`, `Stock
 
 ## Placeholder Modules (Not Yet Implemented)
 
-- `src/qsf/features/` — Feature engineering
-- `src/qsf/forecasting/` — Price movement prediction (partially implemented, not wired into API)
+- `src/qsf/features/` — Feature engineering (implemented; used by the forecast node)
 - `src/qsf/backtesting/` — Historical validation
 - `src/qsf/pipelines/` — End-to-end pipeline orchestration
 
