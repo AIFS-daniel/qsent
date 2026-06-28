@@ -29,7 +29,7 @@ jobs:
 
       - uses: anomalyco/opencode/github@latest
         env:
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
         with:
           model: google/gemini-2.5-flash

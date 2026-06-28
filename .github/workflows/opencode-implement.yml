@@ -29,8 +29,9 @@ jobs:
               state: 'open'
             });
             const issueNumber = context.payload.issue.number;
+            const closingPattern = new RegExp(`(closes|fixes|resolves)\\s+#${issueNumber}\\b`, 'i');
             const linked = prs.data.find(pr =>
-              pr.body && pr.body.includes(`#${issueNumber}`)
+              pr.body && closingPattern.test(pr.body)
             );
             if (linked) {
               await github.rest.issues.createComment({
@@ -39,6 +40,10 @@ jobs:
                 issue_number: issueNumber,
                 body: `⚠️ Implementation aborted — [PR #${linked.number}](${linked.html_url}) already exists for this issue. Apply the \`autonomous-review\` label to validate it instead.`
               });
+              await core.summary
+                .addHeading('⚠️ Implementation skipped')
+                .addRaw(`Open PR <a href="${linked.html_url}">#${linked.number}</a> already exists for issue #${issueNumber}. Apply <code>autonomous-review</code> to validate it instead.`)
+                .write();
               core.setOutput('pr_exists', 'true');
             } else {
               core.setOutput('pr_exists', 'false');
@@ -58,7 +63,7 @@ jobs:
         if: steps.check-pr.outputs.pr_exists == 'false'
         uses: anomalyco/opencode/github@latest
         env:
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
         with:
           model: google/gemini-2.5-flash
