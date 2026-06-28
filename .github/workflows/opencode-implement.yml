@@ -40,6 +40,10 @@ jobs:
                 issue_number: issueNumber,
                 body: `⚠️ Implementation aborted — [PR #${linked.number}](${linked.html_url}) already exists for this issue. Apply the \`autonomous-review\` label to validate it instead.`
               });
+              await core.summary
+                .addHeading('⚠️ Implementation skipped')
+                .addRaw(`Open PR <a href="${linked.html_url}">#${linked.number}</a> already exists for issue #${issueNumber}. Apply <code>autonomous-review</code> to validate it instead.`)
+                .write();
               core.setOutput('pr_exists', 'true');
             } else {
               core.setOutput('pr_exists', 'false');
