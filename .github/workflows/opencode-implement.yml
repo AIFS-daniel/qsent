@@ -44,6 +44,16 @@ jobs:
               core.setOutput('pr_exists', 'false');
             }
 
+      - name: Read prompt
+        id: read-prompt
+        if: steps.check-pr.outputs.pr_exists == 'false'
+        run: |
+          content=$(cat .github/prompts/implement.md)
+          content="${content//\$ISSUE_NUMBER/${{ github.event.issue.number }}}"
+          echo "content<<EOF" >> $GITHUB_OUTPUT
+          echo "$content" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Implement
         if: steps.check-pr.outputs.pr_exists == 'false'
         uses: anomalyco/opencode/github@latest
@@ -51,21 +61,4 @@ jobs:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
         with:
           model: google/gemini-2.5-flash
-          prompt: |
-            Implement the feature described in this GitHub issue.
-
-            Follow the TDD workflow strictly:
-            1. Write failing tests first that describe the intended behavior
-            2. Implement the minimum code to make the tests pass
-            3. Verify the full test suite is green
-            4. Open a PR linked to this issue
-
-            Branch naming: create a branch named auto/issue-${{ github.event.issue.number }}.
-
-            PR body must include "Closes #${{ github.event.issue.number }}" so the
-            issue closes automatically on merge and the PR can be detected by other
-            workflows.
-
-            Project context is in CLAUDE.md. Tests live in tests/unit/ and
-            tests/integration/. Run tests with:
-              .venv/bin/pytest tests/unit/ tests/integration/
+          prompt: ${{ steps.read-prompt.outputs.content }}

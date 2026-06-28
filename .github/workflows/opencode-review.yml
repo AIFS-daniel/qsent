@@ -18,18 +18,18 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Read prompt
+        id: read-prompt
+        run: |
+          content=$(cat .github/prompts/review.md)
+          content="${content//\$ISSUE_NUMBER/${{ github.event.issue.number }}}"
+          echo "content<<EOF" >> $GITHUB_OUTPUT
+          echo "$content" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - uses: anomalyco/opencode/github@latest
         env:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
         with:
           model: google/gemini-2.5-flash
-          prompt: |
-            Review the open PR linked to issue #${{ github.event.issue.number }}.
-
-            Check that:
-            1. The implementation matches the issue requirements
-            2. Tests exist and cover the new behaviour
-            3. The full test suite passes
-
-            Post a comment on the PR summarising your findings. Flag any
-            gaps between the issue requirements and what was implemented.
+          prompt: ${{ steps.read-prompt.outputs.content }}
