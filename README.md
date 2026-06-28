@@ -399,6 +399,20 @@ If `playwright` is not found, make sure your venv is active (`source .venv/bin/a
 - Document assumptions and decisions
 - When in doubt, ask before refactoring shared code
 
+### Autonomous implementation
+
+Issues can be implemented automatically by the AI agent — no manual triggering required.
+
+1. Create a GitHub issue describing the feature or bug fix clearly
+2. Apply the `autonomous` label — the agent will pick it up, follow TDD, and open a PR
+
+If the issue already has an open PR and you apply `autonomous` by mistake, the agent will abort and post a comment explaining why. Apply `autonomous-review` instead to have the agent check the existing PR against the issue requirements and post its findings.
+
+**Tips for writing good autonomous issues:**
+- Be specific about the expected behaviour, not just the goal
+- Reference relevant files or functions if you know them
+- Include acceptance criteria where possible — the agent uses these to validate its own work
+
 ---
 
 ## Project Status
