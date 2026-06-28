@@ -49,6 +49,12 @@ jobs:
               core.setOutput('pr_exists', 'false');
             }
 
+      - name: Configure git identity
+        if: steps.check-pr.outputs.pr_exists == 'false'
+        run: |
+          git config --global user.email "autonomous-agent@github-actions"
+          git config --global user.name "Autonomous Agent"
+
       - name: Read prompt
         id: read-prompt
         if: steps.check-pr.outputs.pr_exists == 'false'
