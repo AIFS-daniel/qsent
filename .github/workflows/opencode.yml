@@ -1,0 +1,37 @@
+name: Autonomous Feature Agent
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    if: github.event.label.name == 'autonomous'
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: anomalyco/opencode/github@latest
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        with:
+          model: google/gemini-2.0-flash
+          prompt: |
+            Implement the feature described in this GitHub issue.
+
+            Follow the TDD workflow strictly:
+            1. Write failing tests first that describe the intended behavior
+            2. Implement the minimum code to make the tests pass
+            3. Verify the full test suite is green
+            4. Open a PR linked to this issue
+
+            Project context is in CLAUDE.md. Tests live in tests/unit/ and
+            tests/integration/. Run tests with:
+              .venv/bin/pytest tests/unit/ tests/integration/
