@@ -29,8 +29,9 @@ jobs:
               state: 'open'
             });
             const issueNumber = context.payload.issue.number;
+            const closingPattern = new RegExp(`(closes|fixes|resolves)\\s+#${issueNumber}\\b`, 'i');
             const linked = prs.data.find(pr =>
-              pr.body && pr.body.includes(`#${issueNumber}`)
+              pr.body && closingPattern.test(pr.body)
             );
             if (linked) {
               await github.rest.issues.createComment({
@@ -58,7 +59,7 @@ jobs:
         if: steps.check-pr.outputs.pr_exists == 'false'
         uses: anomalyco/opencode/github@latest
         env:
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
         with:
           model: google/gemini-2.5-flash
