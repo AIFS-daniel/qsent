@@ -1,4 +1,4 @@
-name: Autonomous Feature Agent
+name: Autonomous Implementation
 
 on:
   issues:
@@ -29,14 +29,23 @@ jobs:
               state: 'open'
             });
             const issueNumber = context.payload.issue.number;
-            const linked = prs.data.some(pr =>
+            const linked = prs.data.find(pr =>
               pr.body && pr.body.includes(`#${issueNumber}`)
             );
-            return linked;
-          result-encoding: string
+            if (linked) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                body: `⚠️ Implementation aborted — [PR #${linked.number}](${linked.html_url}) already exists for this issue. Apply the \`autonomous-review\` label to validate it instead.`
+              });
+              core.setOutput('pr_exists', 'true');
+            } else {
+              core.setOutput('pr_exists', 'false');
+            }
 
       - name: Implement
-        if: steps.check-pr.outputs.result == 'false'
+        if: steps.check-pr.outputs.pr_exists == 'false'
         uses: anomalyco/opencode/github@latest
         env:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
@@ -54,16 +63,3 @@ jobs:
             Project context is in CLAUDE.md. Tests live in tests/unit/ and
             tests/integration/. Run tests with:
               .venv/bin/pytest tests/unit/ tests/integration/
-
-      - name: Validate existing PR
-        if: steps.check-pr.outputs.result == 'true'
-        uses: anomalyco/opencode/github@latest
-        env:
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-        with:
-          model: google/gemini-2.0-flash
-          prompt: |
-            A PR already exists for this issue. Review the open PR linked
-            to issue #${{ github.event.issue.number }}. Check that the
-            implementation matches the issue requirements and the tests
-            pass. Post a comment on the PR summarising your findings.
