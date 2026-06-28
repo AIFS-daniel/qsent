@@ -60,6 +60,12 @@ jobs:
             3. Verify the full test suite is green
             4. Open a PR linked to this issue
 
+            Branch naming: create a branch named auto/issue-${{ github.event.issue.number }}.
+
+            PR body must include "Closes #${{ github.event.issue.number }}" so the
+            issue closes automatically on merge and the PR can be detected by other
+            workflows.
+
             Project context is in CLAUDE.md. Tests live in tests/unit/ and
             tests/integration/. Run tests with:
               .venv/bin/pytest tests/unit/ tests/integration/
