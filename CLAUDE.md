@@ -151,6 +151,23 @@ Always invoke `test-writer` before `code-builder`. Tests come first.
 
 The `qa` agent starts the webapp (if not already running) and uses Playwright to verify each behavior in the live browser, including screenshots. It runs after `code-reviewer`. Server start command: `TEST_MODE=true .venv/bin/uvicorn qsf.api.main:app --reload`. Auth bypass: `GET /auth/test-login` (only available when `TEST_MODE=true`).
 
+## Autonomous GitHub Agent
+
+Issues can be implemented automatically without human involvement by applying labels:
+
+- `autonomous` — triggers the implementation workflow: the agent reads the issue, follows the TDD workflow above, and opens a PR named `auto/issue-{N}` with `Closes #N` in the body
+- `autonomous-review` — triggers the review workflow: the agent checks the open PR linked to the issue and posts its findings as a PR comment
+
+**Abort behaviour:** if `autonomous` is applied to an issue that already has an open PR, the workflow aborts and posts a comment on the issue explaining why, with a pointer to use `autonomous-review` instead.
+
+**Key files:**
+- `.github/workflows/opencode-implement.yml` — implementation workflow (CI orchestration only)
+- `.github/workflows/opencode-review.yml` — review workflow (CI orchestration only)
+- `.github/prompts/implement.md` — agent instructions for implementation (edit this to tune behaviour)
+- `.github/prompts/review.md` — agent instructions for review (edit this to tune behaviour)
+
+**Required GitHub secret:** `GOOGLE_API_KEY` — free API key from Google AI Studio. Model: `google/gemini-2.5-flash`.
+
 ## /tdd Command
 
 `/tdd` runs a strict red-green-refactor TDD cycle, orchestrating `test-writer`, `test-runner`, `code-builder`, and `code-reviewer` in sequence for each behavior.
