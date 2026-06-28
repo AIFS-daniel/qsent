@@ -75,3 +75,4 @@ jobs:
           model: google/gemini-2.5-flash
           prompt: ${{ steps.read-prompt.outputs.content }}
           use_github_token: true
+          share: true
