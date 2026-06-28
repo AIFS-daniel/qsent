@@ -33,4 +33,4 @@ jobs:
         with:
           model: google/gemini-2.5-flash
           prompt: ${{ steps.read-prompt.outputs.content }}
-          token: ${{ github.token }}
+          use_github_token: true
