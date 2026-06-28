@@ -1,0 +1,64 @@
+name: Autonomous Implementation
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    if: github.event.label.name == 'autonomous'
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Check for existing PR
+        id: check-pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prs = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open'
+            });
+            const issueNumber = context.payload.issue.number;
+            const linked = prs.data.find(pr =>
+              pr.body && pr.body.includes(`#${issueNumber}`)
+            );
+            if (linked) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                body: `⚠️ Implementation aborted — [PR #${linked.number}](${linked.html_url}) already exists for this issue. Apply the \`autonomous-review\` label to validate it instead.`
+              });
+              core.setOutput('pr_exists', 'true');
+            } else {
+              core.setOutput('pr_exists', 'false');
+            }
+
+      - name: Read prompt
+        id: read-prompt
+        if: steps.check-pr.outputs.pr_exists == 'false'
+        run: |
+          content=$(cat .github/prompts/implement.md)
+          content="${content//\$ISSUE_NUMBER/${{ github.event.issue.number }}}"
+          echo "content<<EOF" >> $GITHUB_OUTPUT
+          echo "$content" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Implement
+        if: steps.check-pr.outputs.pr_exists == 'false'
+        uses: anomalyco/opencode/github@latest
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        with:
+          model: google/gemini-2.5-flash
+          prompt: ${{ steps.read-prompt.outputs.content }}
