@@ -18,7 +18,26 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: anomalyco/opencode/github@latest
+      - name: Check for existing PR
+        id: check-pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prs = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open'
+            });
+            const issueNumber = context.payload.issue.number;
+            const linked = prs.data.some(pr =>
+              pr.body && pr.body.includes(`#${issueNumber}`)
+            );
+            return linked;
+          result-encoding: string
+
+      - name: Implement
+        if: steps.check-pr.outputs.result == 'false'
+        uses: anomalyco/opencode/github@latest
         env:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
         with:
@@ -35,3 +54,16 @@ jobs:
             Project context is in CLAUDE.md. Tests live in tests/unit/ and
             tests/integration/. Run tests with:
               .venv/bin/pytest tests/unit/ tests/integration/
+
+      - name: Validate existing PR
+        if: steps.check-pr.outputs.result == 'true'
+        uses: anomalyco/opencode/github@latest
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        with:
+          model: google/gemini-2.0-flash
+          prompt: |
+            A PR already exists for this issue. Review the open PR linked
+            to issue #${{ github.event.issue.number }}. Check that the
+            implementation matches the issue requirements and the tests
+            pass. Post a comment on the PR summarising your findings.
