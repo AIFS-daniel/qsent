@@ -166,7 +166,7 @@ Issues can be implemented automatically without human involvement by applying la
 - `.github/prompts/implement.md` — agent instructions for implementation (edit this to tune behaviour)
 - `.github/prompts/review.md` — agent instructions for review (edit this to tune behaviour)
 
-**Required GitHub secret:** `GOOGLE_API_KEY` — free API key from Google AI Studio. Model: `google/gemini-2.5-flash`.
+**Required GitHub secret:** `GOOGLE_GENERATIVE_AI_API_KEY` — free API key from Google AI Studio. Model: `google/gemini-2.5-flash`.
 
 ## /tdd Command
 
