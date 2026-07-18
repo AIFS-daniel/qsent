@@ -159,7 +159,7 @@ The `qa` agent starts the webapp (if not already running) and uses Playwright to
 
 Issues can be implemented automatically without human involvement by applying labels:
 
-- `autonomous` — triggers the implementation workflow: the agent reads the issue, follows the TDD workflow above, and opens a PR named `auto/issue-{N}` with `Closes #N` in the body
+- `autonomous` — triggers the implementation workflow: the agent reads the issue and follows the TDD workflow above; the workflow wrapper (not the agent) then commits, pushes, and opens the PR itself if the working tree is dirty when the session ends, using its own `opencode/issue{N}-{timestamp}` branch naming
 - `autonomous-review` — triggers the review workflow: the agent checks the open PR linked to the issue and posts its findings as a PR comment
 
 **Abort behaviour:** if `autonomous` is applied to an issue that already has an open PR, the workflow aborts and posts a comment on the issue explaining why, with a pointer to use `autonomous-review` instead.
