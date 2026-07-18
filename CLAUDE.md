@@ -151,6 +151,10 @@ Always invoke `test-writer` before `code-builder`. Tests come first.
 
 The `qa` agent starts the webapp (if not already running) and uses Playwright to verify each behavior in the live browser, including screenshots. It runs after `code-reviewer`. Server start command: `TEST_MODE=true .venv/bin/uvicorn qsf.api.main:app --reload`. Auth bypass: `GET /auth/test-login` (only available when `TEST_MODE=true`).
 
+**Verify outcomes, not just status:** when a task involves a CI workflow, automation, or any process with an expected end state (a PR opened, a file created, a deployment completed), confirm that end state actually exists rather than relying solely on an exit code or "succeeded" status.
+
+**Prefer primary sources:** when researching current facts (pricing, rate limits, API behavior, provider capabilities), fetch the vendor's own docs/pricing page directly rather than aggregator content; flag conflicts with third-party claims rather than silently picking one.
+
 ## Autonomous GitHub Agent
 
 Issues can be implemented automatically without human involvement by applying labels:
