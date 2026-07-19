@@ -8,6 +8,7 @@ jobs:
   implement:
     runs-on: ubuntu-latest
     if: github.event.label.name == 'autonomous'
+    timeout-minutes: 20
     permissions:
       id-token: write
       contents: write
@@ -55,6 +56,11 @@ jobs:
           git config --global user.email "autonomous-agent@github-actions"
           git config --global user.name "Autonomous Agent"
 
+      - name: Configure git push authentication
+        if: steps.check-pr.outputs.pr_exists == 'false'
+        run: |
+          git remote set-url origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+
       - name: Read prompt
         id: read-prompt
         if: steps.check-pr.outputs.pr_exists == 'false'
@@ -91,7 +97,7 @@ jobs:
           share: true
 
       - name: Notify failure
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/github-script@v7
         with:
           script: |
