@@ -2,24 +2,20 @@ import time
 import uuid
 from pathlib import Path
 
-from dotenv import load_dotenv
+import httpx
+import structlog
+import structlog.contextvars
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, Response, StreamingResponse
+from pydantic import BaseModel
+from starlette.middleware.base import BaseHTTPMiddleware
 
-load_dotenv()  # Must run before auth is imported so env vars are populated
-
-import httpx  # noqa: E402
-import structlog  # noqa: E402
-import structlog.contextvars  # noqa: E402
-from fastapi import Depends, FastAPI, HTTPException, Query, Request  # noqa: E402
-from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
-from fastapi.responses import FileResponse, Response, StreamingResponse  # noqa: E402
-from pydantic import BaseModel  # noqa: E402
-from starlette.middleware.base import BaseHTTPMiddleware  # noqa: E402
-
-from qsf.agents.news_comparison import run_news_comparison, run_news_comparison_stream  # noqa: E402
-from qsf.agents.workflow import pipeline  # noqa: E402
-from qsf.api.auth import COOKIE_NAME, decode_session_token, get_current_user  # noqa: E402
-from qsf.api.auth import router as auth_router  # noqa: E402
-from qsf.common.logging import configure_logging, flush_langfuse, get_langfuse, set_current_trace, get_logger  # noqa: E402
+from qsf.agents.news_comparison import run_news_comparison, run_news_comparison_stream
+from qsf.agents.workflow import pipeline
+from qsf.api.auth import COOKIE_NAME, decode_session_token, get_current_user
+from qsf.api.auth import router as auth_router
+from qsf.common.logging import configure_logging, flush_langfuse, get_langfuse, set_current_trace, get_logger
 
 configure_logging()
 
