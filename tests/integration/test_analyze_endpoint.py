@@ -41,11 +41,47 @@ def test_analyze_valid_ticker(mock_pipeline):
 
 @patch("qsf.api.main.pipeline")
 def test_analyze_returns_404_on_error(mock_pipeline):
-    mock_pipeline.invoke.return_value = {"error": "No price data found for 'FAKE123'"}
+    # NOTE: written pre-implementation — `detail` becomes a dict (with
+    # "error" and "source_status" keys) once code-builder implements
+    # per-source status tracking. This test is expected to fail (KeyError
+    # on `["error"]`, since `detail` is currently a plain string) until then.
+    mock_pipeline.invoke.return_value = {
+        "error": "No price data found for 'FAKE123'",
+        "source_status": {
+            "market": "No price data found for 'FAKE123'",
+            "news": "skipped",
+            "reddit": "skipped",
+            "sentiment": "skipped",
+        },
+    }
 
     response = client.post("/analyze", json={"ticker": "FAKE123"})
     assert response.status_code == 404
-    assert "FAKE123" in response.json()["detail"]
+    assert "FAKE123" in response.json()["detail"]["error"]
+
+
+@patch("qsf.api.main.pipeline")
+def test_analyze_error_response_includes_source_status(mock_pipeline):
+    # NOTE: written pre-implementation — expected to fail until code-builder
+    # changes the /analyze 404 handler to return a dict `detail` containing
+    # both "error" and "source_status".
+    mock_pipeline.invoke.return_value = {
+        "error": "Failed to fetch Reddit data: received 401 HTTP response",
+        "source_status": {
+            "market": "ok",
+            "news": "ok",
+            "reddit": "Failed to fetch Reddit data: received 401 HTTP response",
+            "sentiment": "skipped",
+        },
+    }
+
+    response = client.post("/analyze", json={"ticker": "IONQ"})
+    assert response.status_code == 404
+    detail = response.json()["detail"]
+    assert isinstance(detail, dict)
+    assert "error" in detail
+    assert "source_status" in detail
+    assert isinstance(detail["source_status"], dict)
 
 
 def test_analyze_missing_ticker():

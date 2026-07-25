@@ -6,6 +6,9 @@
 
 - Authenticated user sees app
 - Analyze renders chart
+- Analyze shows error table on failure
+- Analyze error table renders provider message as literal text
+- Analyze shows stringified detail when source status missing
 - Logout redirects to login
 - Profile button is visible
 - Profile dropdown opens on click
@@ -24,6 +27,7 @@
 - Health
 - Analyze valid ticker
 - Analyze returns 404 on error
+- Analyze error response includes source status
 - Analyze missing ticker
 - Analyze ticker is uppercased
 

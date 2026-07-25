@@ -238,3 +238,109 @@ class TestAggregate:
             (r["breakdown"]["news_sentiment"] + r["breakdown"]["social_sentiment"]) / 2, 4
         )
         assert r["sentiment_score"] == expected
+
+
+# ---------------------------------------------------------------------------
+# source_status
+#
+# NOTE: written pre-implementation — these tests are expected to FAIL until
+# code-builder adds the `source_status` field to PipelineState and wires
+# per-node try/except + status bookkeeping in workflow.py.
+# ---------------------------------------------------------------------------
+
+class TestSourceStatus:
+    def test_given_all_providers_succeed_when_pipeline_runs_then_all_sources_marked_ok(self):
+        market, news, social, model = make_providers()
+        pipeline = build_pipeline(market, news, social, model)
+        state = pipeline.invoke({"ticker": "IONQ"})
+        assert state["source_status"] == {
+            "market": "ok",
+            "news": "ok",
+            "reddit": "ok",
+            "sentiment": "ok",
+        }
+
+    def test_given_market_provider_raises_when_pipeline_runs_then_error_set_and_downstream_sources_skipped(self):
+        market, news, social, model = make_providers()
+        market.get_history.side_effect = Exception("connection timeout")
+        pipeline = build_pipeline(market, news, social, model)
+        state = pipeline.invoke({"ticker": "IONQ"})
+
+        assert state.get("error")
+
+        status = state["source_status"]
+        assert status["market"] != "ok"
+        assert isinstance(status["market"], str) and status["market"]
+        assert status["news"] == "skipped"
+        assert status["reddit"] == "skipped"
+        assert status["sentiment"] == "skipped"
+
+    def test_given_news_provider_raises_when_pipeline_runs_then_error_set_and_downstream_sources_skipped(self):
+        market, news, social, model = make_providers()
+        news.get_articles.side_effect = Exception("NewsAPI timeout")
+        pipeline = build_pipeline(market, news, social, model)
+        state = pipeline.invoke({"ticker": "IONQ"})
+
+        assert state.get("error")
+
+        status = state["source_status"]
+        assert status["market"] == "ok"
+        assert status["news"] != "ok"
+        assert isinstance(status["news"], str) and status["news"]
+        assert status["reddit"] == "skipped"
+        assert status["sentiment"] == "skipped"
+
+    def test_given_reddit_provider_raises_when_pipeline_runs_then_error_set_and_sentiment_skipped(self):
+        market, news, social, model = make_providers()
+        social.get_posts.side_effect = Exception("received 401 HTTP response")
+        pipeline = build_pipeline(market, news, social, model)
+        state = pipeline.invoke({"ticker": "IONQ"})
+
+        assert state.get("error")
+
+        status = state["source_status"]
+        assert status["market"] == "ok"
+        assert status["news"] == "ok"
+        assert status["reddit"] != "ok"
+        assert isinstance(status["reddit"], str)
+        assert "401" in status["reddit"]
+        assert status["sentiment"] == "skipped"
+
+    def test_given_sentiment_model_raises_when_pipeline_runs_then_error_set_and_sentiment_status_describes_failure(self):
+        market, news, social, model = make_providers()
+        model.score.side_effect = Exception("HuggingFace API down")
+        pipeline = build_pipeline(market, news, social, model)
+        state = pipeline.invoke({"ticker": "IONQ"})
+
+        assert state.get("error")
+
+        status = state["source_status"]
+        assert status["market"] == "ok"
+        assert status["news"] == "ok"
+        assert status["reddit"] == "ok"
+        assert status["sentiment"] != "ok"
+        assert isinstance(status["sentiment"], str) and status["sentiment"]
+
+    def test_given_empty_market_history_when_pipeline_runs_then_market_status_matches_error_and_downstream_skipped(self):
+        market, news, social, model = make_providers(history=pd.DataFrame())
+        pipeline = build_pipeline(market, news, social, model)
+        state = pipeline.invoke({"ticker": "FAKE"})
+
+        status = state["source_status"]
+        assert status["market"] == state["error"]
+        assert status["market"] not in ("ok", "skipped")
+        assert status["news"] == "skipped"
+        assert status["reddit"] == "skipped"
+        assert status["sentiment"] == "skipped"
+
+    def test_given_no_news_or_social_items_when_pipeline_runs_then_sentiment_status_matches_error(self):
+        market, news, social, model = make_providers(articles=[], posts=[], scores=[])
+        pipeline = build_pipeline(market, news, social, model)
+        state = pipeline.invoke({"ticker": "IONQ"})
+
+        status = state["source_status"]
+        assert status["market"] == "ok"
+        assert status["news"] == "ok"
+        assert status["reddit"] == "ok"
+        assert status["sentiment"] == state["error"]
+        assert status["sentiment"] not in ("ok", "skipped")
