@@ -238,3 +238,53 @@ class TestAggregate:
             (r["breakdown"]["news_sentiment"] + r["breakdown"]["social_sentiment"]) / 2, 4
         )
         assert r["sentiment_score"] == expected
+
+
+# ---------------------------------------------------------------------------
+# forecast (opt-in node, gated by forecast_enabled)
+# ---------------------------------------------------------------------------
+
+from tests.unit.test_forecasting_pipeline import synth_hist  # noqa: E402
+
+
+def _market_with_forecast_history():
+    """Market mock returning the 2y window for forecasting, 30d otherwise."""
+    big = synth_hist()
+    market, news, social, model = make_providers()
+    market.get_history.side_effect = (
+        lambda ticker, period: big if period == "2y" else MOCK_HIST
+    )
+    return market, news, social, model
+
+
+class TestForecastNode:
+    def test_forecast_disabled_by_default(self):
+        market, news, social, model = make_providers()
+        pipeline = build_pipeline(market, news, social, model)
+        state = pipeline.invoke({"ticker": "IONQ"})
+        # The forecast node must not run on the default /analyze path.
+        assert state.get("forecast") is None
+        # Market data is only fetched for the 30-day sentiment window.
+        for call in market.get_history.call_args_list:
+            assert call.args[1] == "30d"
+
+    def test_forecast_enabled_produces_forecast(self):
+        market, news, social, model = _market_with_forecast_history()
+        pipeline = build_pipeline(market, news, social, model)
+        state = pipeline.invoke({"ticker": "IONQ", "forecast_enabled": True})
+        assert state.get("error") is None
+        assert "forecast" in state
+        assert "best_model" in state["forecast"]
+        # The sentiment result is still produced alongside the forecast.
+        assert state.get("result") is not None
+        # The 2y window was requested for forecasting.
+        assert any(c.args[1] == "2y" for c in market.get_history.call_args_list)
+
+    def test_forecast_skipped_on_upstream_error(self):
+        market, news, social, model = _market_with_forecast_history()
+        # Empty 30d history triggers an upstream error before forecasting.
+        market.get_history.side_effect = lambda ticker, period: pd.DataFrame()
+        pipeline = build_pipeline(market, news, social, model)
+        state = pipeline.invoke({"ticker": "FAKE", "forecast_enabled": True})
+        assert state.get("error") is not None
+        assert state.get("forecast") is None

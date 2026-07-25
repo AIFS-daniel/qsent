@@ -28,7 +28,10 @@ class PipelineState(TypedDict, total=False):
     news_items: list
     reddit_items: list
     scored_items: list
+    sentiment_daily: Any
     result: Optional[dict]
+    forecast_enabled: bool
+    forecast: Optional[dict]
     error: Optional[str]
 
 
@@ -222,6 +225,12 @@ def build_pipeline(
         merged["news_sentiment"] = news_aligned
         merged["social_sentiment"] = social_aligned
 
+        # Daily sentiment overlay for the forecasting node. A DatetimeIndex is
+        # used so it aligns by date against the forecaster's own market history
+        # (which spans a longer window than this sentiment one).
+        sentiment_daily = merged[["news_sentiment", "social_sentiment"]].copy()
+        sentiment_daily.index = pd.to_datetime(sentiment_daily.index)
+
         # Overall scores
         news_mean = news_daily.mean()
         social_mean = social_daily.mean()
@@ -263,7 +272,44 @@ def build_pipeline(
             ],
         }
         if span: span.end(output={"sentiment_score": safe(overall_sentiment), "trend": trend, "data_points": len(scored_items)})
-        return {"result": result}
+        return {"result": result, "sentiment_daily": sentiment_daily}
+
+    def _forecast(state: dict) -> dict:
+        if state.get("error"):
+            return {}
+        ticker = state["ticker"]
+        trace = get_current_trace()
+        span = trace.span(name="forecast", input={"ticker": ticker}) if trace else None
+
+        # Forecasting needs a much longer window than the 30-day sentiment view,
+        # so it fetches its own history through the same injected provider.
+        hist = market.get_history(ticker, "2y")
+        if hist.empty:
+            logger.warning("[%s] forecast: no market data for 2y window", ticker)
+            if span: span.end(output={"error": "no market data"}, level="ERROR")
+            return {"error": f"No market data found for '{ticker}'"}
+
+        # Imported lazily so the sentiment-only path (every /analyze request)
+        # never pays the sklearn/feature-engineering import cost at startup.
+        from qsf.forecasting.pipeline import ForecastingPipeline
+
+        sentiment_daily = state.get("sentiment_daily")
+        forecaster = ForecastingPipeline(ticker=ticker)
+        forecast = forecaster.run(hist, sentiment_daily=sentiment_daily)
+
+        if forecast.get("error"):
+            logger.warning("[%s] forecast: %s", ticker, forecast["error"])
+            if span: span.end(output={"error": forecast["error"]}, level="ERROR")
+            return {"error": forecast["error"]}
+
+        best = forecast.get("best_model", {})
+        logger.info(
+            "[%s] forecast: best=%s sharpe=%.3f dir_acc=%.3f",
+            ticker, best.get("name", "?"),
+            best.get("sharpe", 0.0), best.get("directional_accuracy", 0.0),
+        )
+        if span: span.end(output={"best_model": best.get("name"), "sharpe": best.get("sharpe")})
+        return {"forecast": forecast}
 
     graph = StateGraph(PipelineState)
 
@@ -272,13 +318,21 @@ def build_pipeline(
     graph.add_node("fetch_reddit", _fetch_reddit)
     graph.add_node("score_sentiment", _score_sentiment)
     graph.add_node("aggregate", _aggregate)
+    graph.add_node("forecast", _forecast)
 
     graph.set_entry_point("fetch_market_data")
     graph.add_edge("fetch_market_data", "fetch_news")
     graph.add_edge("fetch_news", "fetch_reddit")
     graph.add_edge("fetch_reddit", "score_sentiment")
     graph.add_edge("score_sentiment", "aggregate")
-    graph.add_edge("aggregate", END)
+    # Forecasting is an opt-in layer: /analyze stops at aggregate, /forecast
+    # sets forecast_enabled=True to run the extra (slow) modelling node.
+    graph.add_conditional_edges(
+        "aggregate",
+        lambda s: "forecast" if (s.get("forecast_enabled") and not s.get("error")) else END,
+        {"forecast": "forecast", END: END},
+    )
+    graph.add_edge("forecast", END)
 
     return graph.compile()
 

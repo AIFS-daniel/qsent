@@ -74,6 +74,16 @@ class NewsComparisonRequest(BaseModel):
     tickers: list[str]
 
 
+class ForecastRequest(BaseModel):
+    ticker: str
+
+
+# Forecasting trains several models per request (10-30s), so results are cached
+# per ticker for a short window rather than recomputed on every call.
+FORECAST_CACHE_TTL_S = 600
+_forecast_cache: dict[str, tuple[float, dict]] = {}
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -105,6 +115,42 @@ def analyze(request: AnalyzeRequest, user: dict = Depends(get_current_user)):
     if state.get("error"):
         raise HTTPException(status_code=404, detail=state["error"])
     return state["result"]
+
+
+@app.post("/forecast")
+def forecast(request: ForecastRequest, user: dict = Depends(get_current_user)):
+    ticker = request.ticker.upper().strip()
+    trace_id = structlog.contextvars.get_contextvars().get("trace_id", uuid.uuid4().hex)
+
+    cached = _forecast_cache.get(ticker)
+    if cached and time.monotonic() - cached[0] < FORECAST_CACHE_TTL_S:
+        log.info("forecast.cache_hit", ticker=ticker)
+        return cached[1]
+
+    lf = get_langfuse()
+    if lf:
+        trace = lf.trace(
+            id=trace_id,
+            name="forecast",
+            user_id=user.get("google_sub") or "anonymous",
+            session_id=ticker,
+            input={"ticker": ticker},
+        )
+        set_current_trace(trace)
+
+    state = pipeline.invoke({"ticker": ticker, "trace_id": trace_id, "forecast_enabled": True})
+
+    if lf and not state.get("error") and state.get("forecast"):
+        lf.trace(id=trace_id, output={"best_model": state["forecast"].get("best_model", {}).get("name")})
+
+    flush_langfuse()
+
+    if state.get("error"):
+        raise HTTPException(status_code=404, detail=state["error"])
+
+    result = state["forecast"]
+    _forecast_cache[ticker] = (time.monotonic(), result)
+    return result
 
 
 @app.post("/diagnostics/news-comparison")
