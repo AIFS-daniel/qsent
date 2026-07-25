@@ -234,7 +234,7 @@ Start Langfuse locally (requires Docker):
 docker compose -f docker-compose.langfuse.yml up -d
 ```
 
-Then open http://localhost:3000, sign up, create a project, and copy the API keys into `.env`:
+Then open http://localhost:3000, sign up, create a project, and set the API keys in Doppler (`qsent` project, `dev` config):
 
 ```
 LANGFUSE_PUBLIC_KEY=<your public key>
@@ -267,7 +267,7 @@ To log out, visit `http://localhost:8000/auth/logout`.
 To skip Google SSO when testing locally, start the server with `TEST_MODE=true`:
 
 ```bash
-TEST_MODE=true uvicorn qsf.api.main:app --reload
+TEST_MODE=true doppler run -- uvicorn qsf.api.main:app --reload
 ```
 
 Then visit `http://localhost:8000/auth/test-login` once — it sets a session cookie and drops you straight into the app. This route is only registered when `TEST_MODE=true` and is never available in production.
@@ -297,13 +297,14 @@ pip install -e ".[dev]"
 
 ### 2. Set up environment variables
 
-Copy the example file and fill in your keys:
+The app no longer reads `.env` directly — secrets are injected at process launch via [Doppler](https://www.doppler.com). One-time setup:
 
 ```bash
-cp .env.example .env
+doppler login
+doppler setup   # select the qsent project, dev config
 ```
 
-Required keys:
+`.env.example` still documents the variable names the app expects, for reference if you need to add a new one in Doppler:
 ```
 # Google OAuth (see Authentication section above)
 GOOGLE_CLIENT_ID=
@@ -330,7 +331,7 @@ To get `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, create an OAuth 2.0 client
 ### 3. Start the server
 
 ```bash
-uvicorn qsf.api.main:app --reload
+doppler run -- uvicorn qsf.api.main:app --reload
 ```
 
 The `--reload` flag restarts the server automatically when you edit source files.
@@ -381,7 +382,7 @@ E2E tests (Playwright) must be run manually on your local machine — they requi
 playwright install chromium
 
 # Terminal 1: start the server with test mode enabled
-TEST_MODE=true uvicorn qsf.api.main:app --reload
+TEST_MODE=true doppler run -- uvicorn qsf.api.main:app --reload
 
 # Terminal 2: run E2E tests
 pytest tests/e2e/

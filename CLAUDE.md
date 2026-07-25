@@ -15,11 +15,11 @@ The longer-term vision is a full AI forecasting system with backtesting. A `Fore
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-# Run server (normal — requires Google OAuth credentials in .env)
-.venv/bin/uvicorn qsf.api.main:app --reload
+# Run server (normal — requires doppler login && doppler setup done once; Google OAuth credentials come from Doppler)
+doppler run -- .venv/bin/uvicorn qsf.api.main:app --reload
 
 # Run server (test mode — bypasses Google auth)
-TEST_MODE=true .venv/bin/uvicorn qsf.api.main:app --reload
+TEST_MODE=true doppler run -- .venv/bin/uvicorn qsf.api.main:app --reload
 
 # Run all fast tests
 .venv/bin/pytest tests/unit/ tests/integration/
@@ -112,7 +112,7 @@ app.dependency_overrides[get_current_user] = lambda: MOCK_USER
 
 **QA/E2E bypass (TEST_MODE only):**
 ```bash
-TEST_MODE=true .venv/bin/uvicorn qsf.api.main:app --reload
+TEST_MODE=true doppler run -- .venv/bin/uvicorn qsf.api.main:app --reload
 # Then visit http://localhost:8000/auth/test-login once to get a session cookie
 ```
 
@@ -149,7 +149,7 @@ When implementing a feature or fixing a bug, invoke agents in this order:
 
 Always invoke `test-writer` before `code-builder`. Tests come first.
 
-The `qa` agent starts the webapp (if not already running) and uses Playwright to verify each behavior in the live browser, including screenshots. It runs after `code-reviewer`. Server start command: `TEST_MODE=true .venv/bin/uvicorn qsf.api.main:app --reload`. Auth bypass: `GET /auth/test-login` (only available when `TEST_MODE=true`).
+The `qa` agent starts the webapp (if not already running) and uses Playwright to verify each behavior in the live browser, including screenshots. It runs after `code-reviewer`. Server start command: `TEST_MODE=true doppler run -- .venv/bin/uvicorn qsf.api.main:app --reload`. Auth bypass: `GET /auth/test-login` (only available when `TEST_MODE=true`).
 
 **Verify outcomes, not just status:** when a task involves a CI workflow, automation, or any process with an expected end state (a PR opened, a file created, a deployment completed), confirm that end state actually exists rather than relying solely on an exit code or "succeeded" status.
 
