@@ -139,6 +139,29 @@ def test_analyze_error_table_renders_provider_message_as_literal_text(page: Page
     assert page.locator('[data-source="market"] .status-value img').count() == 0
 
 
+def test_analyze_shows_stringified_detail_when_source_status_missing(page: Page, base_url: str):
+    """
+    Regression test: if /analyze ever returns a 404 with an object `detail`
+    that lacks a `source_status` key (a shape mismatch, not the normal
+    per-source error path), the status line must show readable JSON, never
+    the literal string "[object Object]".
+    """
+    page.route(
+        "**/analyze",
+        lambda route: route.fulfill(
+            status=404,
+            content_type="application/json",
+            body=json.dumps({"detail": {"error": "weird shape", "foo": "bar"}}),
+        ),
+    )
+    page.goto(base_url)
+    page.fill("#ticker", "IONQ")
+    page.click("#analyzeBtn")
+
+    expect(page.locator("#status")).not_to_have_text("Error: [object Object]")
+    expect(page.locator("#status")).to_contain_text("weird shape")
+
+
 def test_logout_redirects_to_login(page: Page, base_url: str):
     page.goto(f"{base_url}/auth/logout")
     page.wait_for_url(f"{base_url}/login.html", timeout=5000)

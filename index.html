@@ -265,7 +265,10 @@
             return;
           }
 
-          status.textContent = `Error: ${detail || res.statusText}`;
+          const message = typeof detail === "string" || !detail
+            ? detail || res.statusText
+            : JSON.stringify(detail);
+          status.textContent = `Error: ${message}`;
           return;
         }
 
