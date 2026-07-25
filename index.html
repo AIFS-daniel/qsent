@@ -60,6 +60,15 @@
     }
     .meta span b { color: #fff; }
 
+    .error-card { width: 100%; max-width: 960px; background: #1c1f2e; border-radius: 12px; padding: 1.5rem; }
+    .error-heading { font-size: 1.1rem; color: #fff; margin-bottom: 1rem; }
+    .status-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .status-table td { padding: 0.5rem 0; border-bottom: 1px solid #2e3250; }
+    .status-table td.status-label { color: #aaa; width: 160px; }
+    .status-value.status-ok { color: #4caf7d; }
+    .status-value.status-skipped { color: #888; }
+    .status-value.status-error { color: #f76c6c; }
+
     header {
       position: relative;
       width: 100%;
@@ -160,6 +169,13 @@
 
   <div id="status"></div>
 
+  <div class="error-card" id="errorSection" style="display:none">
+    <h2 class="error-heading">Oops, something went wrong</h2>
+    <table class="status-table">
+      <tbody id="statusTableBody"></tbody>
+    </table>
+  </div>
+
   <div class="chart-wrapper" id="chartSection" style="display:none">
     <div class="meta" id="meta"></div>
     <canvas id="chart"></canvas>
@@ -222,6 +238,7 @@
       btn.disabled = true;
       status.textContent = `Fetching data for ${ticker}...`;
       document.getElementById("chartSection").style.display = "none";
+      document.getElementById("errorSection").style.display = "none";
 
       try {
         const res = await fetch("/analyze", {
@@ -236,18 +253,69 @@
             window.location.href = "/login.html";
             return;
           }
-          const err = await res.json();
-          status.textContent = `Error: ${err.detail || res.statusText}`;
+
+          const err = await res.json().catch(() => null);
+          const detail = err?.detail;
+
+          if (detail && typeof detail === "object" && detail.source_status) {
+            document.getElementById("chartSection").style.display = "none";
+            status.textContent = "";
+            renderStatusTable(detail.source_status);
+            document.getElementById("errorSection").style.display = "block";
+            return;
+          }
+
+          status.textContent = `Error: ${detail || res.statusText}`;
           return;
         }
 
         const data = await res.json();
         renderChart(data);
         status.textContent = "";
+        document.getElementById("errorSection").style.display = "none";
       } catch (e) {
         status.textContent = `Failed to connect to API: ${e.message}`;
       } finally {
         btn.disabled = false;
+      }
+    }
+
+    function renderStatusTable(sourceStatus) {
+      const sources = [
+        { key: "market", label: "Market Data" },
+        { key: "news", label: "News" },
+        { key: "reddit", label: "Reddit / Social" },
+        { key: "sentiment", label: "Sentiment Scoring" },
+      ];
+
+      const body = document.getElementById("statusTableBody");
+      body.textContent = "";
+
+      for (const { key, label } of sources) {
+        const value = sourceStatus[key] ?? "skipped";
+        let text = value;
+        let cls = "status-error";
+        if (value === "ok") {
+          text = "OK";
+          cls = "status-ok";
+        } else if (value === "skipped") {
+          text = "Skipped";
+          cls = "status-skipped";
+        }
+
+        const row = document.createElement("tr");
+        row.dataset.source = key;
+
+        const labelCell = document.createElement("td");
+        labelCell.className = "status-label";
+        labelCell.textContent = label;
+
+        const valueCell = document.createElement("td");
+        valueCell.className = `status-value ${cls}`;
+        valueCell.textContent = text;
+
+        row.append(labelCell, valueCell);
+        body.appendChild(row);
       }
     }
 

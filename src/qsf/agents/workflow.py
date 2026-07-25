@@ -4,8 +4,9 @@ LangGraph pipeline for sentiment analysis.
 Graph:
     fetch_market_data → fetch_news → fetch_reddit → score_sentiment → aggregate
 """
+import operator
 from datetime import datetime
-from typing import Any, Optional
+from typing import Annotated, Any, Optional
 from typing_extensions import TypedDict
 
 import pandas as pd
@@ -30,6 +31,7 @@ class PipelineState(TypedDict, total=False):
     scored_items: list
     result: Optional[dict]
     error: Optional[str]
+    source_status: Annotated[dict[str, str], operator.or_]
 
 
 def build_pipeline(
@@ -42,10 +44,16 @@ def build_pipeline(
         ticker = state["ticker"]
         trace = get_current_trace()
         span = trace.span(name="fetch_market_data", input={"ticker": ticker}) if trace else None
-        hist = market.get_history(ticker, "30d")
+        try:
+            hist = market.get_history(ticker, "30d")
+        except Exception as e:
+            msg = f"Failed to fetch market data: {e}"
+            if span: span.end(output={"error": str(e)}, level="ERROR")
+            return {"error": msg, "source_status": {"market": msg}}
         if hist.empty:
+            msg = f"No price data found for '{ticker}'"
             if span: span.end(output={"error": "no price data"}, level="ERROR")
-            return {"error": f"No price data found for '{ticker}'"}
+            return {"error": msg, "source_status": {"market": msg}}
         stock_df = hist[["Close", "Volume"]].copy()
         stock_df.index = stock_df.index.date
         stock_df["ror"] = stock_df["Close"].pct_change() * 100
@@ -56,20 +64,30 @@ def build_pipeline(
                 "[%s] fetch_market_data: only %d trading days returned, expected ~21",
                 ticker, days,
             )
-        raw_name = market.get_company_name(ticker)
+        try:
+            raw_name = market.get_company_name(ticker)
+        except Exception as e:
+            msg = f"Failed to fetch market data: {e}"
+            if span: span.end(output={"error": str(e)}, level="ERROR")
+            return {"error": msg, "source_status": {"market": msg}}
         company_name = company_search_name(raw_name)
         logger.info("[%s] fetch_market_data: company name resolved to '%s'", ticker, company_name)
         if span: span.end(output={"trading_days": days, "company_name": company_name})
-        return {"stock_df": stock_df, "company_name": company_name}
+        return {"stock_df": stock_df, "company_name": company_name, "source_status": {"market": "ok"}}
 
     def _fetch_news(state: dict) -> dict:
         if state.get("error"):
-            return {}
+            return {"source_status": {"news": "skipped"}}
         ticker = state["ticker"]
         company_name = state.get("company_name", "")
         trace = get_current_trace()
         span = trace.span(name="fetch_news", input={"ticker": ticker, "company_name": company_name}) if trace else None
-        news_items = news.get_articles(ticker, company_name)
+        try:
+            news_items = news.get_articles(ticker, company_name)
+        except Exception as e:
+            msg = f"Failed to fetch news data: {e}"
+            if span: span.end(output={"error": str(e)}, level="ERROR")
+            return {"error": msg, "source_status": {"news": msg}}
         count = len(news_items)
         logger.info("[%s] fetch_news: %d articles returned", ticker, count)
         if count == 0:
@@ -77,16 +95,21 @@ def build_pipeline(
         elif count < 5:
             logger.warning("[%s] fetch_news: only %d articles returned, sentiment coverage may be sparse", ticker, count)
         if span: span.end(output={"count": count})
-        return {"news_items": news_items}
+        return {"news_items": news_items, "source_status": {"news": "ok"}}
 
     def _fetch_reddit(state: dict) -> dict:
         if state.get("error"):
-            return {}
+            return {"source_status": {"reddit": "skipped"}}
         ticker = state["ticker"]
         company_name = state.get("company_name", "")
         trace = get_current_trace()
         span = trace.span(name="fetch_reddit", input={"ticker": ticker, "company_name": company_name}) if trace else None
-        reddit_items = social.get_posts(ticker, company_name)
+        try:
+            reddit_items = social.get_posts(ticker, company_name)
+        except Exception as e:
+            msg = f"Failed to fetch Reddit data: {e}"
+            if span: span.end(output={"error": str(e)}, level="ERROR")
+            return {"error": msg, "source_status": {"reddit": msg}}
         count = len(reddit_items)
         logger.info("[%s] fetch_reddit: %d posts returned", ticker, count)
         for item in reddit_items:
@@ -94,11 +117,11 @@ def build_pipeline(
         if count == 0:
             logger.warning("[%s] fetch_reddit: 0 posts returned — Reddit API may be unavailable or ticker has low social coverage", ticker)
         if span: span.end(output={"count": count})
-        return {"reddit_items": reddit_items}
+        return {"reddit_items": reddit_items, "source_status": {"reddit": "ok"}}
 
     def _score_sentiment(state: dict) -> dict:
         if state.get("error"):
-            return {}
+            return {"source_status": {"sentiment": "skipped"}}
         ticker = state["ticker"]
         news_items = state.get("news_items", [])
         reddit_items = state.get("reddit_items", [])
@@ -108,11 +131,17 @@ def build_pipeline(
             ticker, len(news_items), len(reddit_items), len(items),
         )
         if not items:
-            return {"error": f"No news or social data found for '{ticker}'"}
+            msg = f"No news or social data found for '{ticker}'"
+            return {"error": msg, "source_status": {"sentiment": msg}}
         trace = get_current_trace()
         span = trace.span(name="score_sentiment", input={"news": len(news_items), "social": len(reddit_items)}) if trace else None
         logger.info("[%s] score_sentiment: calling model.score on %d items", ticker, len(items))
-        scores = model.score([item["text"] for item in items])
+        try:
+            scores = model.score([item["text"] for item in items])
+        except Exception as e:
+            msg = f"Failed to score sentiment: {e}"
+            if span: span.end(output={"error": str(e)}, level="ERROR")
+            return {"error": msg, "source_status": {"sentiment": msg}}
         logger.info("[%s] score_sentiment: model.score returned", ticker)
         for idx, (item, score) in enumerate(zip(items, scores)):
             source_label = "news article" if item["source"] == "news" else "social post"
@@ -157,7 +186,7 @@ def build_pipeline(
                 ticker, mean_score,
             )
         if span: span.end(output={"scored": len(scored), "mean": round(mean_score, 4), "failed": len(items) - len(scored)})
-        return {"scored_items": scored}
+        return {"scored_items": scored, "source_status": {"sentiment": "ok"}}
 
     def _aggregate(state: dict) -> dict:
         if state.get("error"):

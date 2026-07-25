@@ -103,7 +103,10 @@ def analyze(request: AnalyzeRequest, user: dict = Depends(get_current_user)):
     flush_langfuse()
 
     if state.get("error"):
-        raise HTTPException(status_code=404, detail=state["error"])
+        raise HTTPException(
+            status_code=404,
+            detail={"error": state["error"], "source_status": state.get("source_status", {})},
+        )
     return state["result"]
 
 
