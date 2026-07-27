@@ -405,9 +405,9 @@ If `playwright` is not found, make sure your venv is active (`source .venv/bin/a
 Issues can be implemented automatically by the AI agent — no manual triggering required.
 
 1. Create a GitHub issue describing the feature or bug fix clearly
-2. Apply the `autonomous` label — the agent will pick it up, follow TDD, and open a PR
+2. Apply the `autonomous-tdd` label — the agent will pick it up, follow TDD, and open a PR
 
-If the issue already has an open PR and you apply `autonomous` by mistake, the agent will abort and post a comment explaining why. Apply `autonomous-review` instead to have the agent check the existing PR against the issue requirements and post its findings.
+If the issue already has an open PR and you apply `autonomous-tdd` by mistake, the agent will abort and post a comment explaining why. Apply `autonomous-review` instead to have the agent check the existing PR against the issue requirements and post its findings.
 
 **Tips for writing good autonomous issues:**
 - Be specific about the expected behaviour, not just the goal
