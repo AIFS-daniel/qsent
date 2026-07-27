@@ -406,7 +406,7 @@ Issues can be implemented automatically by the AI agent — no manual triggering
 
 1. Create a GitHub issue describing the feature or bug fix clearly
 2. Apply a label to pick the flow:
-   - `autonomous-tdd` — full red-green-refactor TDD workflow; use this for testable feature work
+   - `autonomous-tdd` — TDD-lite workflow: test-writing and implementation are batched across all behaviors, with a single confirm-red and confirm-green pass, rather than a strict per-behavior red-green loop, because the free-tier model this workflow runs on caps at 10 requests/minute (see ADR 008 in `docs/decisions/`); use this for testable feature work
    - `autonomous` — lighter, non-TDD flow (plan, self-review the plan, implement, run the suite once); use this for doc updates, config clarifications, dependency cleanup, small refactors, or small features where less process is an acceptable tradeoff for speed
 
 Either label makes the agent pick up the issue and open a PR.
