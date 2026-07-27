@@ -4,6 +4,10 @@ on:
   issues:
     types: [labeled]
 
+concurrency:
+  group: opencode-implement-issue-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
 jobs:
   implement:
     runs-on: ubuntu-latest
