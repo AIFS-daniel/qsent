@@ -38,7 +38,8 @@ def test_set_and_get_current_trace_round_trip():
 
 def test_init_langfuse_returns_none_without_env_var(monkeypatch):
     # _init_langfuse() checks LANGFUSE_PUBLIC_KEY at call time, unlike the module-level
-    # singleton which is already initialized when .env is loaded before tests run.
+    # singleton which is already initialized from whatever env vars the process started
+    # with (e.g. via `doppler run`), not from a .env file — no such file is loaded for tests.
     monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
     from qsf.common.logging import _init_langfuse
     assert _init_langfuse() is None

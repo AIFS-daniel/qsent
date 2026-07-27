@@ -67,4 +67,4 @@ To trace a specific user's activity: ask them to open `/auth/me` in their browse
 - Langfuse requires Docker to run locally (`docker compose -f docker-compose.langfuse.yml up -d`)
 - If `LANGFUSE_PUBLIC_KEY` is not set, tracing is silently disabled — the pipeline runs normally without it
 - `langfuse.flush()` is called after each pipeline invocation to ensure traces are sent before the HTTP response returns
-- Switching to Langfuse Cloud: change `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST` in `.env`. No code changes required.
+- Switching to Langfuse Cloud: update `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST` in Doppler (project `qsent`, `dev` config). No code changes required.
