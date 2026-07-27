@@ -159,15 +159,18 @@ The `qa` agent starts the webapp (if not already running) and uses Playwright to
 
 Issues can be implemented automatically without human involvement by applying labels:
 
-- `autonomous-tdd` — triggers the implementation workflow: the agent reads the issue and follows the TDD workflow above; the workflow wrapper (not the agent) then commits, pushes, and opens the PR itself if the working tree is dirty when the session ends, using its own `opencode/issue{N}-{timestamp}` branch naming
+- `autonomous-tdd` — triggers the full TDD implementation workflow: the agent reads the issue and follows the TDD workflow above; the workflow wrapper (not the agent) then commits, pushes, and opens the PR itself if the working tree is dirty when the session ends, using its own `opencode/issue{N}-{timestamp}` branch naming
+- `autonomous` — triggers the lighter, non-TDD implementation workflow: the agent produces a short plan (including whether new test coverage is needed), self-reviews that plan, makes the change plus any test the plan called for, and runs the unit suite once (retrying up to 4 times on failure before giving up). No red/green loop, no per-behavior looping. Intended for tasks where full TDD discipline isn't the right fit — doc updates, config clarifications, dependency cleanup, small refactors, or small features where less process is an acceptable tradeoff for speed. Same commit/push/PR wrapper behaviour as `autonomous-tdd`.
 - `autonomous-review` — triggers the review workflow: the agent checks the open PR linked to the issue and posts its findings as a PR comment
 
-**Abort behaviour:** if `autonomous-tdd` is applied to an issue that already has an open PR, the workflow aborts and posts a comment on the issue explaining why, with a pointer to use `autonomous-review` instead.
+**Abort behaviour:** if `autonomous-tdd` or `autonomous` is applied to an issue that already has an open PR, the corresponding workflow aborts and posts a comment on the issue explaining why, with a pointer to use `autonomous-review` instead.
 
 **Key files:**
-- `.github/workflows/opencode-implement.yml` — implementation workflow (CI orchestration only)
+- `.github/workflows/opencode-implement.yml` — `autonomous-tdd` implementation workflow (CI orchestration only)
+- `.github/workflows/opencode-fast.yml` — `autonomous` implementation workflow (CI orchestration only)
 - `.github/workflows/opencode-review.yml` — review workflow (CI orchestration only)
-- `.github/prompts/implement.md` — agent instructions for implementation (edit this to tune behaviour)
+- `.github/prompts/implement.md` — agent instructions for `autonomous-tdd` (edit this to tune behaviour)
+- `.github/prompts/implement-fast.md` — agent instructions for `autonomous` (edit this to tune behaviour)
 - `.github/prompts/review.md` — agent instructions for review (edit this to tune behaviour)
 
 **Required GitHub secret:** `GOOGLE_GENERATIVE_AI_API_KEY` — free API key from Google AI Studio. Model: `google/gemini-2.5-flash`.
