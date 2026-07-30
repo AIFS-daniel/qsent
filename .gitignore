@@ -21,3 +21,6 @@ data/labels/
 
 # Claude Code session state (ephemeral, not for version control)
 .claude/tdd-state.json
+
+# CI tool binaries (e.g. Doppler CLI installed by dopplerhq/cli-action)
+bin/
